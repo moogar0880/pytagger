@@ -309,8 +309,8 @@ class TVTagger(Tagger):
                 #print "{} could not be found on iTunes".format(query)
                 if self.params['artist'] == 'Archer (2009)':
                         self.params['artist'] = 'Archer'
-                print self.params['description']
-                print self.params['longdesc']
+                #print self.params['description']
+                #print self.params['longdesc']
                 Tagger.doTagging(self, vid, self.params)
 
 class MovieTagger(Tagger):
