@@ -15,6 +15,10 @@ try:
     import tvdb_api
 except ImportError:
     print 'tvdb_api not installed'
+try:
+    import tmdb
+except ImportError:
+    print 'tmdb not installed'
 
 __name__       = 'pytagger'
 __doc__        = 'A python backend to iTunes style metadata tagging'
@@ -49,10 +53,15 @@ def parseOptions():
     parser.add_option("-m", "--Movie",
                   action="store_true", dest="movie",
                   help="declare media type as Movie")
+    parser.add_option("-M", "--Music",
+                  action="store_true", dest="music",
+                  help="declare media type as Music")
     (options, args) = parser.parse_args()
     return options
     if options.show:
         tagger = TVTagger(argv)
+    elif options.music:
+        tagger = MusicTagger(argv)
     else:
         tagger = MovieTagger(argv)
 
@@ -111,8 +120,8 @@ class Tagger():
                 command += " --" + key + " \"" + str(params[key]) + "\" name=iTunMOVI domain=com.apple.iTunes"
             else:
                 command += " --" + key + " \"" + str(params[key]) + "\""
-        #print command
-        #Try to prevent those random Non-zero exit status 2 AP erorrs from halting the entire program
+        print command
+        #Need to prevent Non-zero exit status 2 AP erorrs from halting the entire program
         try:
             print "Beginning Metadata tagging..."
             subprocess.check_call(command, shell=True)
@@ -122,12 +131,12 @@ class Tagger():
                 subprocess.check_call("rm {}".format(params['artwork']), shell=True)
             except KeyError:
                 print "no artwork to delete"
-            #command = "mv \"{}\" \"{}\"-old".format(filename, filename)
+            command = "mv \"{}\" \"{}\"-old".format(filename, filename)
             command = "mv \"{}\" \"/Volumes/TV Shows/.Trashes/501/\"".format(filename)
-            #print command
+            print command
             subprocess.check_call(command, shell=True)
             command = "mv tmp.m4v \"{}\"".format(filename)
-            #print command
+            print command
             subprocess.check_call(command, shell=True)
         except subprocess.CalledProcessError as e:
             print "An error occured while tagging {}. AtomicParsley Error-Code: {}".format(filename, e.returncode)
@@ -351,8 +360,8 @@ class TVTagger(Tagger):
 
 class MusicTagger(Tagger):
     def __init__(self, files):
-        self.params = {'stik': 'Music', 'disk': '1/1', 'comment': '', 'apID': __email__, 'output': 'tmp.m4v'}
-        self.supportedTypes = ['.aac']
+        self.params = {'stik': 'Music', 'disk': '1/1', 'comment': '', 'apID': __email__, 'output': 'tmp.m4a'}
+        self.supportedTypes = ['.m4a']
         self.fileCount   = len(files)
         self.fileCounter = 1
         self.buildFields(files)
@@ -367,8 +376,46 @@ class MusicTagger(Tagger):
             if extension not in self.supportedTypes:
                 print "{} is not a supported file type".format(extension)
             else:
-                self.params['title'] = vid[:-4]
-
+                #filename (Track # Track Name)
+                basename = string.replace(os.path.basename(vid), "\\", "").strip()
+                print "Tagging {}".format(basename)
+                #folder containing file (Album Name or Unknown Album)
+                self.params['album']    = string.replace(os.path.dirname(vid), "\\", "")
+                #folder containing folder (Artist Name)
+                self.params['artist']   = string.replace(os.path.dirname(self.params['album']), "\\", "")
+                #track number
+                self.params['tracknum'] = basename[:2].strip()
+                #name of Track
+                self.params['title']    = basename[3:-4].strip()
+                query   = "{} {}".format(self.params['artist'], self.params['title'])
+                results = itunes.search_track(query)
+                for result in results:
+                    if self.params['title'] in result.get_name() and self.params['artist'] == result.get_artist():
+                        track = result
+                        break
+                if track:
+                    self.params['album'] = track.get_album()
+                    albumArt  = track.artwork
+                    albumArt  = string.replace(albumArt['60'], "60x60-50", "600x600-75")
+                    #print albumArt
+                    self.params['artwork'] = string.replace(os.path.basename(albumArt), "\\", "").strip()
+                    #print self.params['artwork']
+                    curlCMD   = "curl -O {}".format(albumArt)
+                    #print curlCMD
+                    print "Downloading Album Artwork..."
+                    subprocess.check_call(curlCMD, shell=True)
+                    self.params['genre'] = track.get_genre()
+                    album = track.get_album()
+                    self.params['copyright']   = album.copyright()
+                    self.params['tracknum']    = "{}/{}".format(self.params['tracknum'], album.get_track_count())
+                    self.params['year']        = album.get_release_date_raw
+                    self.params['albumArtist'] = self.params['artist']
+                    self.params['cnID']        = track.get_id()
+                    if track.json['contentAdvisoryRating'].lower() == 'explicit':
+                        self.params['advisory'] = 'explicit'
+                    Tagger.doTagging(self, song, self.params)
+                else:
+                    print "{} not found in iTunes".format(query)
 
 class MovieTagger(Tagger):
     def __init__(self, files):
@@ -388,37 +435,69 @@ class MovieTagger(Tagger):
                 print "{} is not a supported file type".format(extension)
             else:
                 #title
-                self.params['title'] = vid[:-4]
+                self.params['title'] = string.replace(os.path.basename(vid), "\\", "").strip()[:-4]
                 movieResults = itunes.search_movie(self.params['title'])
-                movieData = None
+                #movieData = None
                 for result in movieResults:
-                    if result == self.params['title']:
+                    if self.params['title'] in result.get_name():
                         movieData = result
                         break
-                if movieData != None:
-                    #Release Date
-                    self.params['year'] = movieData.get_release_date_raw()
+                if movieData:
                     #Artwork
                     artwork = movieData.get_artwork()
                     artwork = string.replace(artwork['60'], "60x60-50", "600x600-75")
-                    self.params['artwork'] = string.replace(os.path.basename(albumArt), "\\", "").strip()
-                    curlCMD   = "curl -O {}".format(albumArt)#curl -O albumArt #will download image, filename will be the filename from url (ie everything after the last /)
+                    self.params['artwork'] = string.replace(os.path.basename(artwork), "\\", "").strip()
+                    curlCMD   = "curl -O {}".format(artwork)
                     subprocess.check_call(curlCMD, shell=True)
                     #Content Rating
                     self.params['contentRating'] = movieData.json['contentAdvisoryRating']
                     #Genre
                     self.params['genre'] = movieData.get_genre()
                     #Catalog ID
-                    self.params['cnID'] = movieData.get_id()
-                    #Short Description
-                    #Long Description
-                    #Actors
-                    #Directors
-                    #Writers
-                    #Producers
-                    Tagger.doTagging(self, vid, self.params)
+                    self.params['cnID']  = movieData.get_id()
                 else:
                     print "{} could not be found in the iTunes Store".format(vid[:-4])
+
+                api_key = '7b4534c44a0601d017210529c4cb2e5c'
+                tmdb.configure(api_key)
+                results = tmdb.Movies(self.params['title'])
+                movie   = None
+                for result in results.iter_results():
+                    if result['title'] == self.params['title']:
+                        movie = tmdb.Movie(result['id'])
+                        break
+                if movie != None:
+                    #Release Date
+                    self.params['year']        = movie.get_release_date()
+                    #Short Description
+                    self.params['description'] = movie.get_overview()
+                    #Long Description
+                    self.params['longdesc']    = movie.get_overview()
+                    #If iTunes data was not found, fill in the fields from the iTunes search
+                    if 'genre' not in self.params.keys():
+                        self.params['genre'] = movie.get_genres()[0]['name']
+                    if 'artwork' not in self.params.keys():
+                        artwork = movie.get_poster()
+                        self.params['artwork'] = string.replace(os.path.basename(artwork), "\\", "").strip()
+                        curlCMD   = "curl -O {}".format(artwork)
+                        subprocess.check_call(curlCMD, shell=True)
+                    #Need to do some fancy querying to get movie's cast
+                    credits = movie.getJSON(tmdb.config['urls']['movie.casts'] % movie.get_id(), 'en')
+                    #Actors
+                    actors = []
+                    for actor in credits['cast']:
+                        actors.append(actor['name'])
+                    #Directors, Writers, Producers
+                    directors = producers = writers = []
+                    for member in credits['crew']:
+                        if member['job'].lower() == 'director' and member['name'] not in directors:
+                            directors.append(member['name'])
+                        elif member['job'].lower() == 'writer' and member['name'] not in writers:
+                            writers.append(member['name'])
+                        elif member['job'].lower == 'producer' and member['name'] not in producers:
+                            producers.append(member['name'])
+                    self.params['rDNSatom'] = createITunesXML(actors, directors, producers, writers)
+                    Tagger.doTagging(self, vid, self.params)
 
 sys.exit(main())
 
