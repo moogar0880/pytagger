@@ -120,7 +120,7 @@ class Tagger():
                 command += " --" + key + " \"" + str(params[key]) + "\" name=iTunMOVI domain=com.apple.iTunes"
             else:
                 command += " --" + key + " \"" + str(params[key]) + "\""
-        print command
+        #print command
         #Need to prevent Non-zero exit status 2 AP erorrs from halting the entire program
         try:
             print "Beginning Metadata tagging..."
@@ -133,10 +133,10 @@ class Tagger():
                 print "no artwork to delete"
             command = "mv \"{}\" \"{}\"-old".format(filename, filename)
             command = "mv \"{}\" \"/Volumes/TV Shows/.Trashes/501/\"".format(filename)
-            print command
+            #print command
             subprocess.check_call(command, shell=True)
             command = "mv tmp.m4v \"{}\"".format(filename)
-            print command
+            #print command
             subprocess.check_call(command, shell=True)
         except subprocess.CalledProcessError as e:
             print "An error occured while tagging {}. AtomicParsley Error-Code: {}".format(filename, e.returncode)
@@ -246,15 +246,9 @@ class TVTagger(Tagger):
                         titleComparator = re.sub(r'\W+', ' ', self.params['TVShowName'])
                         for r in seasonResults:
                             comparativeTitle = re.sub(r'\W+', ' ', r.artist.name)
-                            #titleParsed = self.params['TVShowName'].split(' ')
-                            #if titleParsed[0].lower() != 'the':  
-                            if titleComparator == comparativeTitle and self.params['TVSeasonNum'] in r.get_album().name:
+                            if titleComparator.lower() == comparativeTitle.lower() and self.params['TVSeasonNum'] in r.get_album().name:
                                 seasonData = r
                                 break
-                            #else:
-                            #if titleParsed[1] in r.get_album().name and self.params['TVSeasonNum'] in r.get_album().name:
-                            #    seasonData = r
-                            #    break
                         #seasonData = seasonResults[0]
                         #Copyright info
                         self.params['copyright'] = seasonData.get_copyright()
@@ -439,7 +433,7 @@ class MovieTagger(Tagger):
                 movieResults = itunes.search_movie(self.params['title'])
                 #movieData = None
                 for result in movieResults:
-                    if self.params['title'] in result.get_name():
+                    if self.params['title'].lower() in result.get_name().lower().translate(string.maketrans("",""), string.punctuation):
                         movieData = result
                         break
                 if movieData:
@@ -458,12 +452,12 @@ class MovieTagger(Tagger):
                 else:
                     print "{} could not be found in the iTunes Store".format(vid[:-4])
 
-                api_key = '7b4534c44a0601d017210529c4cb2e5c'
+                api_key = ''
                 tmdb.configure(api_key)
                 results = tmdb.Movies(self.params['title'])
                 movie   = None
                 for result in results.iter_results():
-                    if result['title'] == self.params['title']:
+                    if string.replace(result['title'].lower(),":", "") == self.params['title'].lower():
                         movie = tmdb.Movie(result['id'])
                         break
                 if movie != None:
