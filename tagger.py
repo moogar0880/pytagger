@@ -481,7 +481,7 @@ class MovieTagger(Tagger):
                 else:
                     print "{} could not be found in the iTunes Store".format(vid[:-4])
                 #Insert TMDB API key here
-                api_key = '7b4534c44a0601d017210529c4cb2e5c'
+                api_key = ''
                 tmdb.configure(api_key)
                 results = tmdb.Movies(self.params['title'])
                 movie   = None
