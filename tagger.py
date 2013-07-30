@@ -224,7 +224,7 @@ class TVTagger(Tagger):
             #Content Rating
             parameters['contentRating'] = episodeData.get_content_rating()
         except AttributeError:
-            print "{} not found in iTunes. Checking TVDB for data...".format(query)
+            print "{} not found in iTunes. Checking TVDB for data...".format(search)
         return parameters
 
     #Perform actual queries to TVDB and return results
