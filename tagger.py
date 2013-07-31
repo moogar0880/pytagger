@@ -5,7 +5,14 @@ sys.setdefaultencoding("utf8")
 import os
 import subprocess
 import re
+import logging
+import time
+from datetime import date
 from optparse import OptionParser
+try:
+    import requests
+except:
+    print 'requests module not installed'
 try:
     import itunes
 except ImportError:
@@ -62,7 +69,6 @@ def parseOptions():
                   action="store_true", dest="music",
                   help="declare media type as Music")
     (options, args) = parser.parse_args()
-    print options
     return options
     if options.show:
         tagger = TVTagger(argv)
@@ -125,9 +131,32 @@ def createITunesXML(cast, directors, producers, writers):
 class Tagger():
     '''Generic Tagger Class'''
     def __init__(self):
-        self.supportedTypes = ['.mp4', '.m4v']
+        super(Tagger, self).__init__()
+        self.logger = TaggingLogger()
 
-    #Build Atomic Parsley Call
+    '''
+    Attempts to download artwork from the provided URL and write
+    it to a .jpg file named 'albumart.jpg' then return True as
+    long as a valid HTTP response is recieved. If an error should
+    occur, nothing is downloaded and False is returned
+    '''
+    def hasArtwork(self,url):
+        self.logger.info("Downloading Album Artwork...\n\tURL: {}".format(url))
+        req = requests.get(url)
+        if req.status_code >= 200 and req.status_code < 300:
+            f = open('albumart.jpg','w')
+            f.write(req.content)
+            f.close()
+            f = open('albumart.jpg','w')
+            f.truncate()
+            f.close()
+            parameters['artwork'] = 'albumart.jpg'
+            return True
+        else:
+            self.logger.log("Album Art Not Downloaded: {}".format(req.status_code))
+            return False
+
+    #Build Atomic Parsley Call, can be called by all subclasses
     def doTagging(self, filename, params):
         if 'artwork' in params.keys():
             command = "AtomicParsley \"{}\" --artwork REMOVE_ALL --output \"tmp.m4v\"".format(filename)
@@ -163,7 +192,7 @@ class Tagger():
 class TVTagger(Tagger):
     '''Tagger Subclass tailored to tagging TV Show metadata'''
     def __init__(self, files):
-        #'encodingTool': __title__, 
+        super(TVTagger, self).__init__()
         self.params = {'stik': 'TV Show', 'disk': '1/1', 'comment': '', 'apID': __email__}
         self.tvdb = Tvdb(actors=True)
         self.supportedTypes = ['.mp4', '.m4v']
@@ -175,7 +204,7 @@ class TVTagger(Tagger):
     def doiTunesSearch(self,queries):
         parameters = {}
         search = queries['season']
-        print "Searching iTunes for {}".format(search)
+        self.logger.info("Searching iTunes for {}".format(search))
         #Gather Season information
         seasonResults = itunes.search_season(search)
         seasonData    = None
@@ -190,20 +219,20 @@ class TVTagger(Tagger):
                         break
                 #Copyright info
                 parameters['copyright'] = seasonData.get_copyright()
-                albumArt  = seasonData.get_artwork()
-                albumArt  = string.replace(albumArt['60'], "60x60-50", "600x600-75")
-                parameters['artwork'] = string.replace(os.path.basename(albumArt), "\\", "").strip()
-                curlCMD   = "curl -O {}".format(albumArt)
-                print "Downloading Album Artwork..."
-                subprocess.check_call(curlCMD, shell=True)
+                url = seasonData.get_artwork()
+                url = string.replace(albumArt['60'], "60x60-50", "600x600-75")
+                if self.hasArtwork(url):
+                    parameters['artwork'] = 'albumart.jpg'
+
         except AttributeError:
-            print "{} not found in iTunes".format(search)
+            self.logger.log("{} not found in iTunes".format(search))
+
 
         #Gather episode information
         search = queries['episode']
-        print "Searching iTunes for {}".format(search)
-        episodeResults       = itunes.search_episode(search)
-        episodeData = None
+        self.logger.info("Searching iTunes for {}".format(search))
+        episodeResults = itunes.search_episode(search)
+        episodeData    = None
         if episodeResults != []:
             episodeData = episodeResults[0]
         try:
@@ -224,7 +253,7 @@ class TVTagger(Tagger):
             #Content Rating
             parameters['contentRating'] = episodeData.get_content_rating()
         except AttributeError:
-            print "{} not found in iTunes. Checking TVDB for data...".format(search)
+            self.logger.log("{} not found in iTunes. Checking TVDB for data...".format(search))
         return parameters
 
     #Perform actual queries to TVDB and return results
@@ -233,17 +262,17 @@ class TVTagger(Tagger):
 
     def buildFields(self, files):
         if( len(files) == 0 ):
-            print "No files give to tag\n"
+            self.logger.err("No files give to tag")
             os._exit(os.EX_OK)
         i = 1
         for vid in files:
             extension = os.path.splitext(vid)[-1].lower()
             if extension not in self.supportedTypes:
-                print "{} is not a supported file type".format(extension)
+                self.logger.err("{} given to be tagged, but {} is not a supported file type".format(vid,extension))
             else:
                 #filename (Episode # Episode Name)
                 basename = string.replace(os.path.basename(vid), "\\", "").strip()
-                print "Tagging {}".format(basename)
+                self.logger.info("Tagging {}".format(basename))
                 #folder containing file (Season #)
                 seaName  = string.replace(os.path.dirname(vid), "\\", "")
                 #folder containing folder (Show Name)
@@ -291,11 +320,9 @@ class TVTagger(Tagger):
                 #Build queries for iTunes search
                 tmp = {}
                 tmp['season']  = "{} {}".format(self.params['artist'], self.params['TVSeasonNum'])
-                queryTitle = self.params['title'].lower() 
+                queryTitle = self.params['title'].lower()
                 #queryTitle = (string.replace(title.lower(), "the ", "")).strip()
                 queryTitle = (string.replace(queryTitle, "-", " ")).strip()
-                #if 'ii' in queryTitle:
-                    #queryTitle = string.replace(queryTitle, "ii", "2")
                 if 'part ' in queryTitle:
                     queryTitle = string.replace(queryTitle, "part ", "pt ")
                 if 'pt i' in queryTitle:
@@ -312,8 +339,7 @@ class TVTagger(Tagger):
                     queryTitle = string.replace(queryTitle, "fuck", "f***")
                 tmp['episode'] = "{} {}".format(self.params['TVShowName'], queryTitle)
                 #Concatinate parameters with iTunes query results
-                self.params    = dictConcat(self.params, self.doiTunesSearch(tmp))
-
+                self.params  = dictConcat(self.params, self.doiTunesSearch(tmp))
                 #TVDB query for cast, writers, director
                 querySeason  = int(self.params['TVSeasonNum'])
                 queryEpisode = int(self.params['TVEpisodeNum'])
@@ -333,38 +359,38 @@ class TVTagger(Tagger):
                         self.params['description']   = string.replace(self.params['description'], "\"", "\\\"")
                         self.params['description']   = string.replace(self.params['description'], "\n", "")
                         #Different quote character can create AP non-zero exit status 2 problems
-                        
+
                         #If description from TVDB is better than iTunes, use that instead
                         if len(self.params['description']) > len(self.params['longdesc']):
                             self.params['longdesc'] = self.params['description']
                         #print "episode description from TVDB: {}".format(self.params['description'])
                     except:
-                        print "Unexpected error: {}, no description found".format(sys.exc_info()[0])
-                    try: 
+                        self.logger.err("Unexpected error: {}, no description found".format(sys.exc_info()[0]))
+                    try:
                         directors = episode['director']
                     except:
-                        print "Unexpected error: {}, no directors found".format(sys.exc_info()[0])
+                        self.logger.err("Unexpected error: {}, no directors found".format(sys.exc_info()[0]))
                     #parse out director names
                     if directors != None:
                         directors = directors.split('|')
                     try:
                         writers   = episode['writer']
                     except:
-                        print "Unexpected error: {}, no writers found".format(sys.exc_info()[0])
+                        self.logger.err("Unexpected error: {}, no writers found".format(sys.exc_info()[0]))
                     #parse out writer names
                     if writers != None:
                         writers   = writers.split('|')
-                    #if actors != [] and directors != [] and writers != []: 
+                    #if actors != [] and directors != [] and writers != []:
                     self.params['rDNSatom'] = createITunesXML(actors, directors, [], writers)
                     try:
                         newReleaseDate = episode['firstaired']
                         if newReleaseDate != "":
                             self.params['year'] = newReleaseDate + "T00:00:00Z"
                     except:
-                        print "Unexpected error: {}, no firstaired date found on TVDB".format(sys.exc_info()[0])
+                        self.logger.err("Unexpected error: {}, no firstaired date found on TVDB".format(sys.exc_info()[0]))
                 except:
-                    print "Unexpected error: {}, episode not found".format(sys.exc_info()[0])
-                
+                    self.logger.err("Unexpected error: {}, episode not found".format(sys.exc_info()[0]))
+
                 if self.params['artist'] == 'Archer (2009)':
                         self.params['artist'] = 'Archer'
                 #print self.params['description']
@@ -379,6 +405,7 @@ class TVTagger(Tagger):
 class MusicTagger(Tagger):
     '''Tagger Subclass tailored to tagging Music metadata'''
     def __init__(self, files):
+        super(MusicTagger, self).__init__()
         self.params = {'stik': 'Music', 'disk': '1/1', 'comment': '', 'apID': __email__, 'output': 'tmp.m4a'}
         self.supportedTypes = ['.m4a']
         self.fileCount   = len(files)
@@ -387,13 +414,13 @@ class MusicTagger(Tagger):
 
     def buildFields(self, files):
         if len(files) == 0:
-            print "No files give to tag\n"
+            self.logger.err("No files give to tag")
             os._exit(os.EX_OK)
         for song in files:
             #need to check filetype
             extension = os.path.splitext(song)[-1].lower()
             if extension not in self.supportedTypes:
-                print "{} is not a supported file type".format(extension)
+                self.logger.err("{} given to be tagged, but {} is not a supported file type".format(song,extension))
             else:
                 #filename (Track # Track Name)
                 basename = string.replace(os.path.basename(song), "\\", "").strip()
@@ -418,13 +445,10 @@ class MusicTagger(Tagger):
                     #Album
                     self.params['album'] = track.get_album()
                     #Albumart
-                    albumArt  = track.artwork
-                    albumArt  = string.replace(albumArt['60'], "60x60-50", "600x600-75")
-                    self.params['artwork'] = string.replace(os.path.basename(albumArt), "\\", "").strip()
-                    curlCMD   = "curl -O {}".format(albumArt)
-                    #print curlCMD
-                    print "Downloading Album Artwork..."
-                    subprocess.check_call(curlCMD, shell=True)
+                    url  = track.artwork
+                    url  = string.replace(albumArt['60'], "60x60-50", "600x600-75")
+                    if self.hasArtwork(url):
+                        self.params['artwork'] = 'albumart.jpg'
                     #Genre
                     self.params['genre'] = track.get_genre()
                     album = track.get_album()
@@ -435,14 +459,14 @@ class MusicTagger(Tagger):
                     self.params['cnID']        = track.get_id()
                     if track.json['trackExplicitness'].lower() == 'explicit':
                         self.params['advisory'] = 'explicit'
-                    print "Tagging {}".format(basename)
                     self.doTagging(song, self.params)
                 else:
-                    print "{} not found in iTunes".format(query)
+                    self.logger.err("{} not found in iTunes".format(query))
 
 class MovieTagger(Tagger):
     '''Tagger Subclass tailored to tagging Movie metadata'''
     def __init__(self, files):
+        super(MovieTagger, self).__init__()
         self.params = {'stik': 'Movie', 'disk': '1/1', 'comment': '', 'apID': __email__, 'output': 'tmp.m4v'}
         self.tvdb = Tvdb(actors=True)
         self.supportedTypes = ['.mp4', '.m4v']
@@ -450,13 +474,13 @@ class MovieTagger(Tagger):
 
     def buildFields(self, files):
         if( len(files) == 0 ):
-            print "No files give to tag\n"
+            self.logger.err("No files give to tag")
             os._exit(os.EX_OK)
         for vid in files:
             #need to check filetype
             extension = os.path.splitext(vid)[-1].lower()
             if extension not in self.supportedTypes:
-                print "{} is not a supported file type".format(extension)
+                self.logger.err("{} given to be tagged, but {} is not a supported file type".format(vid,extension))
             else:
                 #title
                 self.params['title'] = string.replace(os.path.basename(vid), "\\", "").strip()[:-4]
@@ -467,11 +491,10 @@ class MovieTagger(Tagger):
                         break
                 if movieData:
                     #Artwork
-                    artwork = movieData.get_artwork()
-                    artwork = string.replace(artwork['60'], "60x60-50", "600x600-75")
-                    self.params['artwork'] = string.replace(os.path.basename(artwork), "\\", "").strip()
-                    curlCMD   = "curl -O {}".format(artwork)
-                    subprocess.check_call(curlCMD, shell=True)
+                    url = movieData.get_artwork()
+                    url = string.replace(artwork['60'], "60x60-50", "600x600-75")
+                    if self.hasArtwork(url):
+                        self.params['artwork'] = 'albumart.jpg'
                     #Content Rating
                     self.params['contentRating'] = movieData.json['contentAdvisoryRating']
                     #Genre
@@ -479,7 +502,7 @@ class MovieTagger(Tagger):
                     #Catalog ID
                     self.params['cnID']  = movieData.get_id()
                 else:
-                    print "{} could not be found in the iTunes Store".format(vid[:-4])
+                    self.logger.err("{} could not be found in the iTunes Store".format(vid[:-4]))
                 #Insert TMDB API key here
                 api_key = ''
                 tmdb.configure(api_key)
@@ -521,5 +544,47 @@ class MovieTagger(Tagger):
                             producers.append(member['name'])
                     self.params['rDNSatom'] = createITunesXML(actors, directors, producers, writers)
                     self.doTagging(vid, self.params)
+
+class TaggingLogger(object):
+    """Logger wrapper class for PyTagger Logging"""
+    def __init__(self,name=None):
+        super(TaggingLogger, self).__init__()
+        logDate = date.today().isoformat()
+        if name == None:
+            name = "logs/{}{}.log".format(__name__,logDate)
+        logging.basicConfig(filename=name,level=logging.DEBUG,format='%(asctime)s %(levelname)s:%(message)s',datefmt='%m/%d/%Y %I:%M:%S %p')
+        self.name = name
+        self.logger = logging.getLogger(__name__)
+        self.start()
+
+    def start(self):
+        f = open(self.name,'a')
+        for i in range(15):
+            f.write('=')
+        f.write(self.name[5:-4])
+        for i in range(15):
+            f.write('=')
+        f.write('\n\n')
+        f.close()
+
+    def finish(self):
+        f = open(self.name,'a')
+        f.write('\n\n')
+        f.close()
+
+    def log(self,message):
+        self.logger.debug(message)
+
+    def warn(self,message):
+        self.logger.warning(message)
+
+    def info(self,message):
+        self.logger.info(message)
+
+    def err(self,message):
+        self.logger.error(message)
+
+    def crit(self,message):
+        self.logger.critical(message)
 
 sys.exit(main())
