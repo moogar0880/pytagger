@@ -30,7 +30,7 @@ except ImportError:
 __name__       = 'pytagger'
 __doc__        = 'A python backend to iTunes style metadata tagging'
 __author__     = 'Jonathan Nappi'
-__version__    = '0.2'
+__version__    = '0.3'
 __license__    = 'GPL'
 __maintainer__ = 'Jonathan Nappi'
 __email__      = 'moogar@comcast.net'
@@ -53,10 +53,10 @@ def main(argv=None):
     elif mediaType.music:
         tagger = MusicTagger(argv)
 
-'''
-Command line options parser
-'''
 def parseOptions():
+    '''
+        Command line options parser
+    '''
     usage = "usage: tagger.py [options] [filenames]"
     parser = OptionParser(usage)
     parser.add_option("-t", "--TV",
@@ -77,21 +77,21 @@ def parseOptions():
     else:
         tagger = MovieTagger(argv)
 
-'''
-Universal dicttionary concatinator.
-WARNING: Assumes that all key values will be unique
-'''
 def dictConcat(d1,d2):
+    '''
+        Universal dicttionary concatinator.
+        WARNING: Assumes that all key values will be unique
+    '''
     for key in d2.keys():
         d1[key] = d2[key]
     return d1
 
-'''
-Function for generating the rDNSatom XML data required for
-iTunes style metadata to be able to list the actors, directors,
-producers, and writers for any video media type to be tagged
-'''
 def createITunesXML(cast, directors, producers, writers):
+    '''
+        Function for generating the rDNSatom XML data required for
+        iTunes style metadata to be able to list the actors, directors,
+        producers, and writers for any video media type to be tagged
+    '''
     xml = '''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD\ PLIST\ 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -128,17 +128,17 @@ def createITunesXML(cast, directors, producers, writers):
     xml += "</dict>\n</plist>"
     return xml
 
-class Tagger():
+class Tagger(object):
     '''Generic Tagger Class'''
     def __init__(self):
         super(Tagger, self).__init__()
         self.logger = TaggingLogger()
 
     '''
-    Attempts to download artwork from the provided URL and write
-    it to a .jpg file named 'albumart.jpg' then return True as
-    long as a valid HTTP response is recieved. If an error should
-    occur, nothing is downloaded and False is returned
+        Attempts to download artwork from the provided URL and write
+        it to a .jpg file named 'albumart.jpg' then return True as
+        long as a valid HTTP response is recieved. If an error should
+        occur, nothing is downloaded and False is returned
     '''
     def hasArtwork(self,url):
         self.logger.info("Downloading Album Artwork...\n\tURL: {}".format(url))
@@ -147,10 +147,6 @@ class Tagger():
             f = open('albumart.jpg','w')
             f.write(req.content)
             f.close()
-            f = open('albumart.jpg','w')
-            f.truncate()
-            f.close()
-            parameters['artwork'] = 'albumart.jpg'
             return True
         else:
             self.logger.log("Album Art Not Downloaded: {}".format(req.status_code))
@@ -168,7 +164,6 @@ class Tagger():
                 command += " --" + key + " \"" + str(params[key]) + "\" name=iTunMOVI domain=com.apple.iTunes"
             else:
                 command += " --" + key + " \"" + str(params[key]) + "\""
-        #print command
         #Need to prevent Non-zero exit status 2 AP erorrs from halting the entire program
         try:
             print "Beginning Metadata tagging..."
@@ -181,10 +176,8 @@ class Tagger():
                 print "no artwork to delete"
             command = "mv \"{}\" \"{}\"-old".format(filename, filename)
             command = "mv \"{}\" \"/Volumes/TV Shows/.Trashes/501/\"".format(filename)
-            #print command
             subprocess.check_call(command, shell=True)
             command = "mv tmp.m4v \"{}\"".format(filename)
-            #print command
             subprocess.check_call(command, shell=True)
         except subprocess.CalledProcessError as e:
             print "An error occured while tagging {}. AtomicParsley Error-Code: {}".format(filename, e.returncode)
@@ -220,7 +213,7 @@ class TVTagger(Tagger):
                 #Copyright info
                 parameters['copyright'] = seasonData.get_copyright()
                 url = seasonData.get_artwork()
-                url = string.replace(albumArt['60'], "60x60-50", "600x600-75")
+                url = string.replace(url['60'], "60x60-50", "600x600-75")
                 if self.hasArtwork(url):
                     parameters['artwork'] = 'albumart.jpg'
 
@@ -363,7 +356,6 @@ class TVTagger(Tagger):
                         #If description from TVDB is better than iTunes, use that instead
                         if len(self.params['description']) > len(self.params['longdesc']):
                             self.params['longdesc'] = self.params['description']
-                        #print "episode description from TVDB: {}".format(self.params['description'])
                     except:
                         self.logger.err("Unexpected error: {}, no description found".format(sys.exc_info()[0]))
                     try:
@@ -393,10 +385,8 @@ class TVTagger(Tagger):
 
                 if self.params['artist'] == 'Archer (2009)':
                         self.params['artist'] = 'Archer'
-                #print self.params['description']
                 if 'longdesc' not in self.params.keys() and 'description' in self.params.keys():
                     self.params['longdesc'] = self.params['description']
-                #print self.params['longdesc']
                 self.doTagging(vid, self.params)
             print "{0:.2f}% done".format(100.0*(float(self.fileCounter)/float(self.fileCount)))
             self.fileCounter += 1
@@ -552,6 +542,8 @@ class TaggingLogger(object):
         logDate = date.today().isoformat()
         if name == None:
             name = "logs/{}{}.log".format(__name__,logDate)
+        if not os.path.exists('logs'):
+            os.mkdir('logs')
         logging.basicConfig(filename=name,level=logging.DEBUG,format='%(asctime)s %(levelname)s:%(message)s',datefmt='%m/%d/%Y %I:%M:%S %p')
         self.name = name
         self.logger = logging.getLogger(__name__)
