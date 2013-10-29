@@ -37,11 +37,16 @@ except ImportError:
     os.chdir('..')
     shutil.rmtree('python-itunes-master')
     os.remove('src.zip')
-# Check to see if tvdb_api module is installed, if not install it from source
+# Check to see if tvdb_api module is installed, if not install it through pip
 try:
     import tvdb_api
 except ImportError:
     subprocess.check_call('sudo pip install tvdb_api', shell=True)
+# Check to see if fuzzywuzzy module is installed, if not install it through pip
+try:
+    import fuzzywuzzy.fuzz
+except ImportError:
+    subprocess.check_call('sudo pip install fuzzywuzzy', shell=True)
 # Check to see if tmdb module is installed, if not install it from source
 try:
     import tmdb
