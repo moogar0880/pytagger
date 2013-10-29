@@ -1,6 +1,7 @@
 import os
 import subprocess
 import zipfile
+import shutil
 from distutils.core import setup
 
 VERSION = '0.5'
@@ -34,7 +35,7 @@ except ImportError:
     os.chdir('python-itunes-master')
     subprocess.check_call('sudo python setup.py install', shell=True)
     os.chdir('..')
-    os.removedirs('python-itunes-master')
+    shutil.rmtree('python-itunes-master')
     os.remove('src.zip')
 # Check to see if tvdb_api module is installed, if not install it from source
 try:
@@ -55,7 +56,7 @@ except ImportError:
     os.chdir('themoviedb-master')
     subprocess.check_call('sudo python setup.py install', shell=True)
     os.chdir('..')
-    os.removedirs('themoviedb-master')
+    shutil.rmtree('themoviedb-master')
     os.remove('src.zip')
 
 setup(name = "pytagger",
