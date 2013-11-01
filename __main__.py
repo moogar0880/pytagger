@@ -1,3 +1,4 @@
+#!/opt/local/bin/python
 import sys
 import argparse
 import pytagger        
