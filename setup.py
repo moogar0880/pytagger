@@ -63,6 +63,8 @@ except ImportError:
     os.chdir('..')
     shutil.rmtree('themoviedb-master')
     os.remove('src.zip')
+print 'alias tag="python /Library/Python/2.7/site-packages/pytagger/__main__.py"'
+subprocess.check_call('alias tag="python /Library/Python/2.7/site-packages/pytagger/__main__.py"', shell=True)
 
 setup(name = "pytagger",
       version = VERSION,
