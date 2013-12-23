@@ -31,7 +31,7 @@ except ImportError:
 __name__       = 'pytagger'
 __doc__        = 'A python backend to iTunes style metadata tagging'
 __author__     = 'Jonathan Nappi'
-__version__    = '0.5'
+__version__    = '0.5.1'
 __license__    = 'GPL'
 __maintainer__ = 'Jonathan Nappi'
 __email__      = 'moogar@comcast.net'
@@ -184,7 +184,7 @@ class TVTagger(Tagger):
     """
     Tagger Subclass tailored to tagging TV Show metadata
     """
-    def __init__(self, files, customs):
+    def __init__(self, files):
         super(TVTagger, self).__init__()
         self.params = {'stik': 'TV Show', 'disk': '1/1', 'comment': '', 'apID': __email__}
         self.tvdb = Tvdb(actors=True)
@@ -192,7 +192,6 @@ class TVTagger(Tagger):
         self.fileCount   = len(files)
         self.fileCounter = 1
         self.files = files
-        self.customs = customs
 
     def do_iTunes_search(self, queries):
         """
@@ -263,47 +262,50 @@ class TVTagger(Tagger):
         directors = writers = ''
         if self.params['artist'] == 'Archer':
             self.params['artist'] = 'Archer (2009)'
-        show = self.tvdb[self.params['artist']]
-        for actor in show['_actors']:
-            actors.append(actor['name'])
         try:
-            episode = show[querySeason][queryEpisode]
+            show = self.tvdb[self.params['artist']]
+            for actor in show['_actors']:
+                actors.append(actor['name'])
             try:
-                #iTunes descriptions can be terrible, use TVDB's when available
-                self.params['description'] = episode['overview'].strip()[:255]
-                self.params['description'] = string.replace(self.params['description'], "\"", "\\\"")
-                self.params['description'] = string.replace(self.params['description'], "\n", "")
-                #Different quote character can create AP non-zero exit status 2 problems
+                episode = show[querySeason][queryEpisode]
+                try:
+                    #iTunes descriptions can be terrible, use TVDB's when available
+                    self.params['description'] = episode['overview'].strip()[:255]
+                    self.params['description'] = string.replace(self.params['description'], "\"", "\\\"")
+                    self.params['description'] = string.replace(self.params['description'], "\n", "")
+                    #Different quote character can create AP non-zero exit status 2 problems
 
-                #If longdesc from TVDB is better than iTunes, use that instead
-                if len(self.params['description']) > len(self.params['longdesc']):
-                    self.params['longdesc'] = self.params['description']
+                    #If longdesc from TVDB is better than iTunes, use that instead
+                    if len(self.params['description']) > len(self.params['longdesc']):
+                        self.params['longdesc'] = self.params['description']
+                except:
+                    self.logger.err("No TVDB description found")
+                try:
+                    directors = episode['director']
+                except:
+                    self.logger.err("No TVDB directors found")
+                #parse out director names
+                if directors != None:
+                    directors = directors.split('|')
+                try:
+                    writers   = episode['writer']
+                except:
+                    self.logger.err("No TVDB writers found")
+                #parse out writer names
+                if writers != None:
+                    writers   = writers.split('|')
+                self.params['rDNSatom'] = create_iTunes_xml(actors, directors, [], 
+                                                          writers)
+                try:
+                    newReleaseDate = episode['firstaired']
+                    if newReleaseDate != "":
+                        self.params['year'] = newReleaseDate + "T00:00:00Z"
+                except:
+                    self.logger.err("No TVDB firstaired date found")
             except:
-                self.logger.err("No TVDB description found")
-            try:
-                directors = episode['director']
-            except:
-                self.logger.err("No TVDB directors found")
-            #parse out director names
-            if directors != None:
-                directors = directors.split('|')
-            try:
-                writers   = episode['writer']
-            except:
-                self.logger.err("No TVDB writers found")
-            #parse out writer names
-            if writers != None:
-                writers   = writers.split('|')
-            self.params['rDNSatom'] = create_iTunes_xml(actors, directors, [], 
-                                                      writers)
-            try:
-                newReleaseDate = episode['firstaired']
-                if newReleaseDate != "":
-                    self.params['year'] = newReleaseDate + "T00:00:00Z"
-            except:
-                self.logger.err("No TVDB firstaired date found")
+                self.logger.err("Episode not found on TVDB")
         except:
-            self.logger.err("Episode not found on TVDB")
+            self.logger.err('Show not found on TVDB')
 
     def collect_metadata(self):
         """
@@ -598,7 +600,7 @@ class TaggingLogger(object):
         super(TaggingLogger, self).__init__()
         logDate = date.today().isoformat()
         if name == None:
-            name = "/var/log/pytagger/{}{}.log".format(__name__, logDate)
+            name = "logs/{}{}.log".format(__name__, logDate)
         if not os.path.exists('logs'):
             os.mkdir('logs')
         logging.basicConfig(filename=name, level=logging.DEBUG, 

@@ -97,4 +97,4 @@ else:
     print 'No media type flag set'
     os._exit(os.EX_OK)
 
-tagger.collectMetadata()
+tagger.collect_metadata()
