@@ -4,7 +4,7 @@ import zipfile
 import shutil
 from distutils.core import setup
 
-VERSION = '0.5.2'
+VERSION = '0.5.3'
 itunesURL = 'https://github.com/moogar0880/python-itunes/archive/master.zip'
 tmdbURL = 'https://github.com/doganaydin/themoviedb/archive/master.zip'
 
@@ -12,10 +12,10 @@ tmdbURL = 'https://github.com/doganaydin/themoviedb/archive/master.zip'
 try:
     subprocess.check_call('which pip', shell=True)
 except:
-    print '''pip is required to install dependencies. 
+    print '''pip is required to install dependencies.
     Please visit https://pypi.python.org/pypi/pip to download and install pip'''
     os._exit(os.EX_OK)
-# Check to see if requests module is installed, if not install it    
+# Check to see if requests module is installed, if not install it
 try:
     import requests
 except:
@@ -74,7 +74,7 @@ setup(name = "pytagger",
       maintainer='Jonathan Nappi',
       maintainer_email='moogar@comcast.net',
       license = "http://www.gnu.org/copyleft/gpl.html",
-      platforms = ["any"], 
+      platforms = ["any"],
       url="https://github.com/moogar0880/pytagger",
       packages=['pytagger'],
     )
