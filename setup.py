@@ -4,7 +4,7 @@ import zipfile
 import shutil
 from distutils.core import setup
 
-VERSION = '0.5'
+VERSION = '0.5.2'
 itunesURL = 'https://github.com/moogar0880/python-itunes/archive/master.zip'
 tmdbURL = 'https://github.com/doganaydin/themoviedb/archive/master.zip'
 

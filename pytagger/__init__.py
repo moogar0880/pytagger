@@ -31,7 +31,7 @@ except ImportError:
 __name__       = 'pytagger'
 __doc__        = 'A python backend to iTunes style metadata tagging'
 __author__     = 'Jonathan Nappi'
-__version__    = '0.5.1'
+__version__    = '0.5.2'
 __license__    = 'GPL'
 __maintainer__ = 'Jonathan Nappi'
 __email__      = 'moogar@comcast.net'
@@ -511,14 +511,25 @@ class MovieTagger(Tagger):
             url = string.replace(url['60'], "60x60-50", "600x600-75")
             if self.has_artwork(url):
                 self.params['artwork'] = 'albumart.jpg'
+            json = movieData.json
             #Content Rating
-            self.params['contentRating'] = movieData.json['contentAdvisoryRating']
+            self.params['contentRating'] = json['contentAdvisoryRating']
+            #Explcitness
+            self.params['advisory'] = json['trackExplicitness']
+            if self.params['advisory'] == 'notExplicit':
+                self.params['advisory'] = 'clean'
+            #Description
+            self.params['longdesc'] = json['longDescription']
+            self.params['description'] = self.params['longdesc'][:253]
             #Genre
-            self.params['genre'] = movieData.get_genre()
+            self.params['genre'] = json['primaryGenreName']
+            #Release Date
+            self.params['year'] = json['releaseDate']
             #Genre ID
             self.params['geID']  = MOVIE_GENREIDS[self.params['genre']]
             #Catalog ID
             self.params['cnID']  = movieData.get_id()
+
         except Exception as e:
             self.logger.err("{} could not be found in the iTunes Store".format(vid[:-4]))
 
@@ -531,8 +542,12 @@ class MovieTagger(Tagger):
         #Insert TMDB API key here
         api_key = ''
         tmdb.configure(api_key)
-        results = tmdb.Movies(self.params['title'])
-        movie   = None
+        try:
+            results = tmdb.Movies(self.params['title'])
+        except KeyError as e:
+            self.logger.err('TMDB Error {} Caught. Cancelling TMDB Search.'.format(e))
+            return None
+        movie = None
         for result in results.iter_results():
             if result['title'].lower() == self.params['title'].lower():
                 movie = tmdb.Movie(result['id'])
@@ -567,7 +582,7 @@ class MovieTagger(Tagger):
                     producers.append(member['name'])
             self.params['rDNSatom'] = create_iTunes_xml(actors, directors, producers, writers)
 
-    def collect_metadata(self, custom_args):
+    def collect_metadata(self):
         """
         Checks that each file passed in is of a valid type. Providing that the 
         file was of the correct type, the various searches are performed and 
