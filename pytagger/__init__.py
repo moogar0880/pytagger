@@ -143,7 +143,7 @@ class Tagger(object):
     def has_artwork(self, url):
         """
         Attempts to download artwork from the provided URL and write it to a
-        .jpg file named 'albumart.jpg' then return True as long as a valid HTTP
+        .jpg file named '.albumart.jpg' then return True as long as a valid HTTP
         response is recieved. If an error should occur, nothing is downloaded
         and False is returned
         """
@@ -187,7 +187,7 @@ class Tagger(object):
             command = "mv \"{}\" \"{}\"-old".format(filename, filename)
             command = "mv \"{}\" \"/Volumes/TV Shows/.Trashes/501/\"".format(filename)
             subprocess.check_call(command, shell=True)
-            command = "mv tmp.m4v \"{}\"".format(filename)
+            command = "mv .tmp.m4v \"{}\"".format(filename)
             subprocess.check_call(command, shell=True)
         except subprocess.CalledProcessError as e:
             print "An error occured while tagging {}. AtomicParsley Error-Code: {}".format(filename, e.returncode)
@@ -236,7 +236,7 @@ class TVTagger(Tagger):
                 url = seasonData.get_artwork()
                 url = string.replace(url['60'], '60x60-50', '600x600-75')
                 if self.has_artwork(url):
-                    parameters['artwork'] = 'albumart.jpg'
+                    parameters['artwork'] = '.albumart.jpg'
         if seasonData == None:
             self.logger.log('{} not found in iTunes'.format(search))
 
@@ -436,7 +436,7 @@ class MusicTagger(Tagger):
             url  = track.artwork
             url  = string.replace(albumArt['60'], "60x60-50", "600x600-75")
             if self.has_artwork(url):
-                self.params['artwork'] = 'albumart.jpg'
+                self.params['artwork'] = '.albumart.jpg'
             #Genre
             self.params['genre'] = track.get_genre()
             album = track.get_album()
@@ -488,7 +488,7 @@ class MovieTagger(Tagger):
     def __init__(self, files):
         super(MovieTagger, self).__init__()
         self.params = {'stik': 'Movie', 'disk': '1/1', 'comment': '',
-                       'apID': __email__, 'output': 'tmp.m4v'}
+                       'apID': __email__, 'output': '.tmp.m4v'}
         self.supportedTypes = ['.mp4', '.m4v']
         self.files = files
         self.queue = []
@@ -520,7 +520,7 @@ class MovieTagger(Tagger):
             url = movieData.get_artwork()
             url = string.replace(url['60'], "60x60-50", "600x600-75")
             if self.has_artwork(url):
-                self.params['artwork'] = 'albumart.jpg'
+                self.params['artwork'] = '.albumart.jpg'
             json = movieData.json
             #Content Rating
             self.params['contentRating'] = json['contentAdvisoryRating']
@@ -571,7 +571,7 @@ class MovieTagger(Tagger):
                 self.params['genre'] = movie.get_genres()[0]['name']
             if 'artwork' not in self.params.keys():
                 if self.has_artwork(movie.get_poster()):
-                    self.params['artwork'] = 'albumart.jpg'
+                    self.params['artwork'] = '.albumart.jpg'
             #Need to do some fancy querying to get movie's cast
             credits = movie.getJSON(tmdb.config['urls']['movie.casts'] % movie.get_id(), 'en')
             #Actors
