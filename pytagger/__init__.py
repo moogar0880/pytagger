@@ -32,7 +32,7 @@ except ImportError:
 __name__       = 'pytagger'
 __doc__        = 'A python backend to iTunes style metadata tagging'
 __author__     = 'Jonathan Nappi'
-__version__    = '0.5.4'
+__version__    = '0.5.5'
 __license__    = 'GPL'
 __maintainer__ = 'Jonathan Nappi'
 __email__      = 'moogar@comcast.net'
@@ -150,7 +150,7 @@ class Tagger(object):
         self.logger.info("Downloading Album Artwork...\n\tURL: {}".format(url))
         req = requests.get(url)
         if req.status_code >= 200 and req.status_code < 300:
-            f = open('albumart.jpg','w')
+            f = open('.albumart.jpg','w')
             f.write(req.content)
             f.close()
             return True
@@ -165,9 +165,9 @@ class Tagger(object):
         file.
         """
         if 'artwork' in params.keys():
-            command = "AtomicParsley \"{}\" --artwork REMOVE_ALL --output \"tmp.m4v\"".format(filename)
+            command = "AtomicParsley \"{}\" --artwork REMOVE_ALL --output \".tmp.m4v\"".format(filename)
         else:
-            command = "AtomicParsley \"{}\" --output \"tmp.m4v\"".format(filename)
+            command = "AtomicParsley \"{}\" --output \".tmp.m4v\"".format(filename)
         keys = params.keys()
         for key in keys:
             if key == 'rDNSatom':
@@ -623,10 +623,11 @@ class TaggingLogger(object):
     def __init__(self,name=None):
         super(TaggingLogger, self).__init__()
         logDate = date.today().isoformat()
+        home = os.path.expanduser('~')
         if name == None:
-            name = "logs/{}{}.log".format(__name__, logDate)
-        if not os.path.exists('logs'):
-            os.mkdir('logs')
+            name = os.path.join(home, '.pytagger_logs/{}{}.log'.format(__name__, logDate))
+        if not os.path.exists(os.path.join(home, '.pytagger_logs')):
+            os.mkdir(os.path.join(home, '.pytagger_logs'))
         logging.basicConfig(filename=name, level=logging.DEBUG,
                             format='%(asctime)s %(levelname)s:%(message)s',
                             datefmt='%m/%d/%Y %I:%M:%S %p')
