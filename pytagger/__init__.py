@@ -32,7 +32,7 @@ except ImportError:
 __name__       = 'pytagger'
 __doc__        = 'A python backend to iTunes style metadata tagging'
 __author__     = 'Jonathan Nappi'
-__version__    = '0.5.3'
+__version__    = '0.5.4'
 __license__    = 'GPL'
 __maintainer__ = 'Jonathan Nappi'
 __email__      = 'moogar@comcast.net'
@@ -59,9 +59,9 @@ MOVIE_GENREIDS = {'Action & Adventure': 4401, 'Anime': 4402, 'Classics': 4403,
                   'Tokusatsu': 4427, 'Korean Cinema': 4428 }
 
 @contextmanager
-def ignored(*exceptions, logger):
+def ignored(*exceptions):
     """
-    Context manager to ignore specified exceptions
+    Context manager to ignore specified exceptions and logging pertinent info
 
         with ignored(AttributeError):
             a = None
@@ -69,6 +69,7 @@ def ignored(*exceptions, logger):
             # bar() is reached despite a.foo() throwing an AttributeError
             bar()
     """
+    logger = logging.getLogger('ignored')
     try:
         yield
     except exceptions:
@@ -221,7 +222,7 @@ class TVTagger(Tagger):
         #Gather Season information
         seasonResults = itunes.search_season(search)
         seasonData    = None
-        with ignored(AttributeError, self.logger):
+        with ignored(AttributeError):
             #Get season data from iTunes
             if seasonResults != []:
                 titleComparator = re.sub(r'\W+', ' ', self.params['TVShowName'])
@@ -246,7 +247,7 @@ class TVTagger(Tagger):
         episodeData    = None
         if episodeResults != []:
             episodeData = episodeResults[0]
-        with ignored(AttributeError, self.logger):
+        with ignored(AttributeError):
             #Genre
             parameters['genre'] = episodeData.get_genre()
             #Genre ID
@@ -279,7 +280,7 @@ class TVTagger(Tagger):
         directors = writers = ''
         if self.params['artist'] == 'Archer':
             self.params['artist'] = 'Archer (2009)'
-        with ignored(Exception, self.logger):
+        with ignored(Exception):
             show = self.tvdb[self.params['artist']]
             for actor in show['_actors']:
                 actors.append(actor['name'])
@@ -500,10 +501,21 @@ class MovieTagger(Tagger):
         """
         movieResults = itunes.search_movie(self.params['title'])
         for result in movieResults:
-            if self.params['title'].lower() in result.get_name().lower().translate(string.maketrans("",""), string.punctuation):
+            if result.get_name().lower() == self.params['title'].lower():
                 movieData = result
                 break
-        with ignored(Exception, self.logger):
+            else:
+                words = self.params['title'].lower().translate(string.maketrans("",""), string.punctuation).split(' ')
+                total = len(words)
+                matches = 0
+                result_words = result.get_name().lower().translate(string.maketrans("",""), string.punctuation).split(' ')
+                for word in words:
+                    if word in result_words:
+                        matches += 1
+                if float(matches)/float(total) > 0.8:
+                    movieData = result
+                    break
+        with ignored(Exception):
             #Artwork
             url = movieData.get_artwork()
             url = string.replace(url['60'], "60x60-50", "600x600-75")
@@ -535,7 +547,7 @@ class MovieTagger(Tagger):
         search
         """
         #Insert TMDB API key here
-        api_key = ''
+        api_key = '7b4534c44a0601d017210529c4cb2e5c'
         tmdb.configure(api_key)
         try:
             results = tmdb.Movies(self.params['title'])
@@ -592,10 +604,12 @@ class MovieTagger(Tagger):
             if extension not in self.supportedTypes:
                 self.logger.err("{} given to be tagged, but {} is not a supported file type".format(vid,extension))
             else:
+                self.logger.info("Tagging {}".format(os.path.basename(vid)))
                 #title
                 self.params['title'] = string.replace(os.path.basename(vid), "\\", "").strip()[:-4]
-                self.params['title'] = string.replace(self.params['title'], " and ", " & ")
-                self.params['title'] = string.replace(self.params['title'], " - ", ": ")
+                # self.params['title'] = string.replace(self.params['title'], " and ", " & ")
+                # self.params['title'] = string.replace(self.params['title'], " - ", ": ")
+                print self.params['title']
 
                 self.do_iTunes_search()
                 self.do_TMDB_search()

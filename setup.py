@@ -3,10 +3,30 @@ import subprocess
 import zipfile
 import shutil
 from distutils.core import setup
+from distutils.command.install import install as _install
 
-VERSION = '0.5.3'
+VERSION = '0.5.4'
 itunesURL = 'https://github.com/moogar0880/python-itunes/archive/master.zip'
 tmdbURL = 'https://github.com/doganaydin/themoviedb/archive/master.zip'
+
+def _post_install(lib_dir):
+    cwd = os.path.join(lib_dir, 'pytagger')
+    main_file = os.path.join(cwd, '__main__.py')
+    # Check for old versions of the executable in /bin
+    try:
+        os.remove('/bin/tag')
+    except:
+        pass # Do nothing if the file didn't exist
+    # Make main executable and create terminal alias
+    subprocess.call('chmod a+x {}'.format(main_file), shell=True)
+    command = 'ln -s {} /bin/tag'.format(main_file)
+    print command
+    subprocess.check_call(command, shell=True)
+
+class install(_install):
+    def run(self):
+        _install.run(self)
+        self.execute(_post_install, (self.install_lib,), msg='Running post install task')
 
 # Check to see if pip is installed, if not quit
 try:
@@ -63,18 +83,17 @@ except ImportError:
     os.chdir('..')
     shutil.rmtree('themoviedb-master')
     os.remove('src.zip')
-print 'alias tag="python /Library/Python/2.7/site-packages/pytagger/__main__.py"'
-subprocess.check_call('alias tag="python /Library/Python/2.7/site-packages/pytagger/__main__.py"', shell=True)
 
-setup(name = "pytagger",
+setup(name = 'pytagger',
       version = VERSION,
-      description="A python backend to iTunes style metadata tagging",
+      description='A python backend to iTunes style metadata tagging',
       author='Jonathan Nappi',
       author_email='moogar@comcast.net',
       maintainer='Jonathan Nappi',
       maintainer_email='moogar@comcast.net',
-      license = "http://www.gnu.org/copyleft/gpl.html",
-      platforms = ["any"],
-      url="https://github.com/moogar0880/pytagger",
+      license = 'http://www.gnu.org/copyleft/gpl.html',
+      platforms = ['any'],
+      url='https://github.com/moogar0880/pytagger',
       packages=['pytagger'],
+      cmdclass={'install': install},
     )
