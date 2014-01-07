@@ -32,7 +32,7 @@ except ImportError:
 __name__       = 'pytagger'
 __doc__        = 'A python backend to iTunes style metadata tagging'
 __author__     = 'Jonathan Nappi'
-__version__    = '0.5.5'
+__version__    = '0.5.6'
 __license__    = 'GPL'
 __maintainer__ = 'Jonathan Nappi'
 __email__      = 'moogar@comcast.net'
@@ -74,6 +74,38 @@ def ignored(*exceptions):
         yield
     except exceptions:
         logger.info('IGNORING {}'.format(exceptions))
+
+def move_to_trash(file_path):
+    """
+    Move the provided file to it's closest Trash folder
+    """
+    uid = os.geteuid()
+    disk = file_path.split('/')[1]
+    local_trash = os.path.join(os.path.expanduser('~'), '.Trash')
+    if disk == 'Users':
+        if os.path.exists(local_trash):
+            command = 'mv "{}" "{}"'.format(file_path, local_trash)
+            print 'command: ', command
+            subprocess.call(command, shell=True)
+        else:
+            print 'ERROR: Can not find Trash'
+    elif disk == 'Volumes':
+        dirs = file_path.split('/')
+        volume_trash = os.path.join(dirs[1], dirs[2], '.Trashes')
+        if os.path.exists(volume_trash):
+            users_volume_trash = os.path.join(volume_trash, str(uid))
+            if os.path.exists(users_volume_trash):
+                subprocess.call('mv "{}" "{}"'.format(file_path, users_volume_trash), shell=True)
+            else:
+                os.mkdir(users_volume_trash)
+                subprocess.call('mv "{}" "{}"'.format(file_path, users_volume_trash), shell=True)
+        elif os.path.exists(local_trash):
+            subprocess.call('mv "{}" "{}"'.format(file_path, local_trash), shell=True)
+        else:
+            print 'ERROR: Can not find Trash'
+        subprocess.call('mv "{}" "{}"'.format(file_path, local_trash), shell=True)
+    else:
+        print 'No idea whats happening...'
 
 def dict_concat(d1, d2):
     """
@@ -185,8 +217,8 @@ class Tagger(object):
             except KeyError:
                 print 'no artwork to delete'
             command = "mv \"{}\" \"{}\"-old".format(filename, filename)
-            command = "mv \"{}\" \"/Volumes/TV Shows/.Trashes/501/\"".format(filename)
-            subprocess.check_call(command, shell=True)
+            # command = "mv \"{}\" \"/Volumes/TV Shows/.Trashes/501/\"".format(filename)
+            move_to_trash(filename)
             command = "mv .tmp.m4v \"{}\"".format(filename)
             subprocess.check_call(command, shell=True)
         except subprocess.CalledProcessError as e:
@@ -237,8 +269,8 @@ class TVTagger(Tagger):
                 url = string.replace(url['60'], '60x60-50', '600x600-75')
                 if self.has_artwork(url):
                     parameters['artwork'] = '.albumart.jpg'
-        if seasonData == None:
-            self.logger.log('{} not found in iTunes'.format(search))
+            if seasonData == None:
+                self.logger.log('{} not found in iTunes'.format(search))
 
         #Gather episode information
         search = queries['episode']
@@ -312,11 +344,7 @@ class TVTagger(Tagger):
         file was of the correct type, the various searches are performed and
         all metadata is gathered.
         """
-        # cores = cpu_count()
-        # pool = Pool(processes=cores)
-        # pool.apply_async(self.divy_up_work, self.files)
-        # pool.map(self.divy_up_work, self.files)
-        if( len(self.files) == 0 ):
+        if len(self.files) == 0:
             self.logger.err("No files give to tag")
             os._exit(os.EX_OK)
         i = 1

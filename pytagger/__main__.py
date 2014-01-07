@@ -84,7 +84,7 @@ args = parse_arguments()
 customArgs = {}
 if not args.auto:
     customArgs = gather_interactive_data(args.files)
-print customArgs
+# print customArgs
 tagger = None
 
 if args.TV:
