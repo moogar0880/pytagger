@@ -277,27 +277,28 @@ class TVTagger(Tagger):
         self.logger.info('Searching iTunes for {}'.format(search))
         episodeResults = itunes.search_episode(search)
         episodeData    = None
-        if episodeResults != []:
-            episodeData = episodeResults[0]
-        with ignored(AttributeError):
-            #Genre
-            parameters['genre'] = episodeData.get_genre()
-            #Genre ID
-            parameters['geID']  = TV_GENREIDS[parameters['genre']]
-            #Release Date
-            parameters['year']  = episodeData.get_release_date()
-            #short description, max length 255 characters
-            parameters['description']   = episodeData.get_short_description().strip()[:255]
-            parameters['description']   = string.replace(parameters['description'], "\n", "")
-            #long description
-            parameters['longdesc']      = episodeData.get_long_description().strip()
-            parameters['longdesc']      = string.replace(parameters['longdesc'], "\n", "")
-            #iTunes Catalog ID
-            parameters['cnID']          = episodeData.get_episodeID()
-            #Content Rating
-            parameters['contentRating'] = episodeData.get_content_rating()
-        if episodeData == None:
-            self.logger.log('{} not found in iTunes'.format(search))
+        else:
+            if episodeResults != []:
+                episodeData = episodeResults[0]
+            else:
+                self.logger.log('{} not found in iTunes'.format(search))
+            with ignored(AttributeError):
+                #Genre
+                parameters['genre'] = episodeData.get_genre()
+                #Genre ID
+                parameters['geID']  = TV_GENREIDS[parameters['genre']]
+                #Release Date
+                parameters['year']  = episodeData.get_release_date()
+                #short description, max length 255 characters
+                parameters['description']   = episodeData.get_short_description().strip()[:255]
+                parameters['description']   = string.replace(parameters['description'], "\n", "")
+                #long description
+                parameters['longdesc']      = episodeData.get_long_description().strip()
+                parameters['longdesc']      = string.replace(parameters['longdesc'], "\n", "")
+                #iTunes Catalog ID
+                parameters['cnID']          = episodeData.get_episodeID()
+                #Content Rating
+                parameters['contentRating'] = episodeData.get_content_rating()
         return parameters
 
     def do_TVDB_search(self):
