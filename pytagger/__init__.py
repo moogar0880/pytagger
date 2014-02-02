@@ -213,16 +213,16 @@ class Tagger(object):
             print 'Metadata tagging complete. moving updated file'
             #if there was albumart, delete the temp file
             try:
-                subprocess.check_call("rm {}".format(params['artwork']), shell=True)
+                subprocess.check_call('rm {}'.format(params['artwork']), shell=True)
             except KeyError:
                 print 'no artwork to delete'
-            command = "mv \"{}\" \"{}\"-old".format(filename, filename)
+            command = 'mv "{}" "{}"-old'.format(filename, filename)
             # command = "mv \"{}\" \"/Volumes/TV Shows/.Trashes/501/\"".format(filename)
             move_to_trash(filename)
-            command = "mv .tmp.m4v \"{}\"".format(filename)
+            command = 'mv .tmp.m4v "{}"'.format(filename)
             subprocess.check_call(command, shell=True)
         except subprocess.CalledProcessError as e:
-            print "An error occured while tagging {}. AtomicParsley Error-Code: {}".format(filename, e.returncode)
+            print 'An error occured while tagging {}. AtomicParsley Error-Code: {}'.format(filename, e.returncode)
 
     def writeOut(self):
         """
@@ -234,7 +234,7 @@ class TVTagger(Tagger):
     """
     Tagger Subclass tailored to tagging TV Show metadata
     """
-    def __init__(self, files):
+    def __init__(self, files, customs=[]):
         super(TVTagger, self).__init__()
         self.params = {'stik': 'TV Show', 'disk': '1/1', 'comment': '', 'apID': __email__}
         self.tvdb = Tvdb(actors=True)
@@ -242,6 +242,7 @@ class TVTagger(Tagger):
         self.fileCount   = len(files)
         self.fileCounter = 1
         self.files = files
+        self.customs = customs
 
     def do_iTunes_search(self, queries):
         """
@@ -250,7 +251,7 @@ class TVTagger(Tagger):
         """
         parameters = {}
         search = queries['season']
-        self.logger.info("Searching iTunes for {}".format(search))
+        self.logger.info('Searching iTunes for {}'.format(search))
         #Gather Season information
         seasonResults = itunes.search_season(search)
         seasonData    = None
@@ -277,28 +278,27 @@ class TVTagger(Tagger):
         self.logger.info('Searching iTunes for {}'.format(search))
         episodeResults = itunes.search_episode(search)
         episodeData    = None
+        if episodeResults != []:
+            episodeData = episodeResults[0]
         else:
-            if episodeResults != []:
-                episodeData = episodeResults[0]
-            else:
-                self.logger.log('{} not found in iTunes'.format(search))
-            with ignored(AttributeError):
-                #Genre
-                parameters['genre'] = episodeData.get_genre()
-                #Genre ID
-                parameters['geID']  = TV_GENREIDS[parameters['genre']]
-                #Release Date
-                parameters['year']  = episodeData.get_release_date()
-                #short description, max length 255 characters
-                parameters['description']   = episodeData.get_short_description().strip()[:255]
-                parameters['description']   = string.replace(parameters['description'], "\n", "")
-                #long description
-                parameters['longdesc']      = episodeData.get_long_description().strip()
-                parameters['longdesc']      = string.replace(parameters['longdesc'], "\n", "")
-                #iTunes Catalog ID
-                parameters['cnID']          = episodeData.get_episodeID()
-                #Content Rating
-                parameters['contentRating'] = episodeData.get_content_rating()
+            self.logger.log('{} not found in iTunes'.format(search))
+        with ignored(AttributeError):
+            #Genre
+            parameters['genre'] = episodeData.get_genre()
+            #Genre ID
+            parameters['geID']  = TV_GENREIDS[parameters['genre']]
+            #Release Date
+            parameters['year']  = episodeData.get_release_date()
+            #short description, max length 255 characters
+            parameters['description']   = episodeData.get_short_description().strip()[:255]
+            parameters['description']   = string.replace(parameters['description'], "\n", "")
+            #long description
+            parameters['longdesc']      = episodeData.get_long_description().strip()
+            parameters['longdesc']      = string.replace(parameters['longdesc'], "\n", "")
+            #iTunes Catalog ID
+            parameters['cnID']          = episodeData.get_episodeID()
+            #Content Rating
+            parameters['contentRating'] = episodeData.get_content_rating()
         return parameters
 
     def do_TVDB_search(self):
@@ -346,10 +346,15 @@ class TVTagger(Tagger):
         all metadata is gathered.
         """
         if len(self.files) == 0:
-            self.logger.err("No files give to tag")
+            self.logger.err('No files give to tag')
             os._exit(os.EX_OK)
         i = 1
-        for vid in self.files:
+        for index, vid in enumerate(self.files):
+            try:
+                for key, val in self.customs[index].items():
+                    self.params[key] = val
+            except Exception:
+                pass
             extension = os.path.splitext(vid)[-1].lower()
             if extension not in self.supportedTypes:
                 self.logger.err("{} given to be tagged, but {} is not a supported file type".format(vid,extension))
@@ -470,7 +475,7 @@ class MusicTagger(Tagger):
             self.params['genre'] = track.get_genre()
             album = track.get_album()
             self.params['copyright']   = album.copyright
-            self.params['tracknum']    = "{}/{}".format(self.params['tracknum'], album.get_track_count())
+            self.params['tracknum']    = '{}/{}'.format(self.params['tracknum'], album.get_track_count())
             self.params['year']        = album.get_release_date_raw()
             self.params['albumArtist'] = self.params['artist']
             self.params['cnID']        = track.get_id()
@@ -487,13 +492,13 @@ class MusicTagger(Tagger):
         all metadata is gathered.
         """
         if len(self.files) == 0:
-            self.logger.err("No files give to tag")
+            self.logger.err('No files give to tag')
             os._exit(os.EX_OK)
         for song in self.files:
             #need to check filetype
             extension = os.path.splitext(song)[-1].lower()
             if extension not in self.supportedTypes:
-                self.logger.err("{} given to be tagged, but {} is not a supported file type".format(song,extension))
+                self.logger.err('{} given to be tagged, but {} is not a supported file type'.format(song,extension))
             else:
                 #filename (Track # Track Name)
                 basename = string.replace(os.path.basename(song), "\\", "").strip()
@@ -598,9 +603,8 @@ class MovieTagger(Tagger):
             #If iTunes data was not found, fill in the fields from the iTunes search
             if 'genre' not in self.params.keys() and movie.get_genres() != []:
                 self.params['genre'] = movie.get_genres()[0]['name']
-            if 'artwork' not in self.params.keys():
-                if self.has_artwork(movie.get_poster()):
-                    self.params['artwork'] = '.albumart.jpg'
+            if self.has_artwork(movie.get_poster()):
+                self.params['artwork'] = '.albumart.jpg'
             #Need to do some fancy querying to get movie's cast
             credits = movie.getJSON(tmdb.config['urls']['movie.casts'] % movie.get_id(), 'en')
             #Actors

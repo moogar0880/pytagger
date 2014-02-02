@@ -36,9 +36,11 @@ def file_poll(question, toRet):
     This method polls the user on which files they would like to edit until the 
     user explicitly quits the interaction.
     """
-    while(True):
+    while True:
         choice = raw_input(question)
         if choice.lower() == 'q':
+            exit()
+        elif choice.lower() == 'e':
             return toRet
         elif choice.lower() == 'a': #Set metadata field for all files
             quest = 'Please enter your metadata and it\'s corresponding target (h for list of targets): '
@@ -49,8 +51,10 @@ def file_poll(question, toRet):
                 split = target.split('=')
                 target = split[0]
                 targetValue = split[1]
+                print target, targetValue, toRet
                 for to in toRet:
                     to[map_readable_to_real(target)] = targetValue
+                    print to[map_readable_to_real(target)]
         else:
             index = int(choice)-1
             quest = 'Please enter your metadata and it\'s corresponding target (h for list of targets): '
@@ -77,18 +81,19 @@ def gather_interactive_data(filelist):
     for i, name in enumerate(names):
         quest += '\t{}: {}\n'.format(i+1, name)
         toRet.append({})
-    quest += 'Choose the file you would like to set metadata for (q to quit): '
+        print toRet
+    quest += 'Choose the file you would like to set metadata for, a for all, e to finish, q to quit: '
     return file_poll(quest, toRet)
 
 args = parse_arguments()
 customArgs = {}
 if not args.auto:
     customArgs = gather_interactive_data(args.files)
-# print customArgs
+print customArgs
 tagger = None
 
 if args.TV:
-    tagger = pytagger.TVTagger(args.files)
+    tagger = pytagger.TVTagger(files=args.files, customs=customArgs)
 elif args.Movie:
     tagger = pytagger.MovieTagger(args.files)
 elif args.Music:
