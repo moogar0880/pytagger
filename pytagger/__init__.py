@@ -548,12 +548,13 @@ class MovieTagger(Tagger):
         parameters dictionary. This title is then used as the query for an
         iTunes movie search
         """
+        self.logger.info('Performing iTunes Search')
         movie_results = itunes.search_movie(self.params['title'])
+        table = string.maketrans('', '')
         movie_data = None
         for result in movie_results:
             result_name = result.get_name().lower()
-            result_name = result_name.translate(string.maketrans('', ''),
-                                                string.punctuation)
+            result_name = result_name.translate(table, string.punctuation)
             result_name = string.replace(result_name, '  ', ' ')
             title = self.params['title'].lower()
             title = title.translate(string.maketrans('', ''),
@@ -613,8 +614,10 @@ class MovieTagger(Tagger):
         parameters dictionary. This title is then used as the query for a TMDB
         movies search
         """
+        self.logger.info('Searching TMDB')
         # Insert TMDB API key here
         api_key = '7b4534c44a0601d017210529c4cb2e5c'
+        table = string.maketrans('', '')
         tmdb.configure(api_key)
         try:
             results = tmdb.Movies(self.params['title'])
@@ -625,12 +628,11 @@ class MovieTagger(Tagger):
         movie = None
         for result in results.iter_results():
             result_name = result['title'].lower()
-            result_name = result_name.translate(string.maketrans('', ''),
-                                                string.punctuation)
+            result_name = strip_unicode(result_name)
+            result_name = result_name.translate(table, string.punctuation)
             result_name = string.replace(result_name, '  ', ' ')
             title = self.params['title'].lower()
-            title = title.translate(string.maketrans('', ''),
-                                    string.punctuation)
+            title = title.translate(table, string.punctuation)
             title = string.replace(title, '  ', ' ')
             if result_name == title:
                 self.params['title'] = result.get_name()
