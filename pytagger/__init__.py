@@ -645,9 +645,10 @@ class MovieTagger(Tagger):
             # Release Date
             self.params['year'] = movie.get_release_date()
             # Short Description
-            self.params['description'] = movie.get_overview()[:253]
+            overview = movie.get_overview()
+            self.params['description'] = strip_unicode(overview[:250])
             # Long Description
-            self.params['longdesc'] = movie.get_overview()
+            self.params['longdesc'] = strip_unicode(overview)
             # If iTunes data was not found, fill in the fields from the iTunes
             # search
             if 'genre' not in self.params.keys() and movie.get_genres() != []:
