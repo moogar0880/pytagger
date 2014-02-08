@@ -635,7 +635,7 @@ class MovieTagger(Tagger):
             title = title.translate(table, string.punctuation)
             title = string.replace(title, '  ', ' ')
             if result_name == title:
-                self.params['title'] = result.get_name()
+                self.params['title'] = strip_unicode(result['title'])
                 movie = tmdb.Movie(result['id'])
         for result in results.iter_results():
             if result['title'].lower() == self.params['title'].lower():
