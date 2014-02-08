@@ -5,9 +5,10 @@ import shutil
 from distutils.core import setup
 from distutils.command.install import install as _install
 
-VERSION = '0.5.6'
+VERSION = '0.6'
 itunesURL = 'https://github.com/moogar0880/python-itunes/archive/master.zip'
 tmdbURL = 'https://github.com/doganaydin/themoviedb/archive/master.zip'
+
 
 def _post_install(lib_dir):
     cwd = os.path.join(lib_dir, 'pytagger')
@@ -23,17 +24,19 @@ def _post_install(lib_dir):
     print command
     subprocess.check_call(command, shell=True)
 
+
 class install(_install):
+
     def run(self):
         _install.run(self)
-        self.execute(_post_install, (self.install_lib,), msg='Running post install task')
-
+        self.execute(_post_install, (self.install_lib,),
+                     msg='Running post install task')
 # Check to see if pip is installed, if not quit
 try:
     subprocess.check_call('which pip', shell=True)
 except:
-    print '''pip is required to install dependencies.
-    Please visit https://pypi.python.org/pypi/pip to download and install pip'''
+    print """pip is required to install dependencies.
+    Please visit https://pypi.python.org/pypi/pip to download and install pip"""
     os._exit(os.EX_OK)
 # Check to see if requests module is installed, if not install it
 try:
@@ -46,10 +49,10 @@ try:
     import itunes
 except ImportError:
     req = requests.get(itunesURL)
-    f = open('src.zip','w')
+    f = open('src.zip', 'w')
     f.write(req.content)
     f.close()
-    src = zipfile.ZipFile('src.zip','r')
+    src = zipfile.ZipFile('src.zip', 'r')
     src.extractall()
     src.close()
     os.chdir('python-itunes-master')
@@ -72,10 +75,10 @@ try:
     import tmdb
 except ImportError:
     req = requests.get(tmdbURL)
-    f = open('src.zip','w')
+    f = open('src.zip', 'w')
     f.write(req.content)
     f.close()
-    src = zipfile.ZipFile('src.zip','r')
+    src = zipfile.ZipFile('src.zip', 'r')
     src.extractall()
     src.close()
     os.chdir('themoviedb-master')
@@ -84,16 +87,16 @@ except ImportError:
     shutil.rmtree('themoviedb-master')
     os.remove('src.zip')
 
-setup(name = 'pytagger',
-      version = VERSION,
+setup(name='pytagger',
+      version=VERSION,
       description='A python backend to iTunes style metadata tagging',
       author='Jonathan Nappi',
       author_email='moogar@comcast.net',
       maintainer='Jonathan Nappi',
       maintainer_email='moogar@comcast.net',
-      license = 'http://www.gnu.org/copyleft/gpl.html',
-      platforms = ['any'],
+      license='http://www.gnu.org/copyleft/gpl.html',
+      platforms=['any'],
       url='https://github.com/moogar0880/pytagger',
       packages=['pytagger'],
-      cmdclass={'install': install},
-    )
+      cmdclass={'install': install}, requires=['requests'],
+      )
