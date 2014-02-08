@@ -8,28 +8,28 @@ import re
 import logging
 from datetime import date
 from contextlib import contextmanager
+import unicodedata
 import requests
 import itunes
 from tvdb_api import Tvdb
 import tvdb_api
 import tmdb
 
-__name__       = 'pytagger'
-__doc__        = 'A python backend to iTunes style metadata tagging'
-__author__     = 'Jonathan Nappi'
-__version__    = '0.6'
-__license__    = 'GPL'
+__name__ = 'pytagger'
+__doc__ = 'A python backend to iTunes style metadata tagging'
+__author__ = 'Jonathan Nappi'
+__version__ = '0.6'
+__license__ = 'GPL'
 __maintainer__ = 'Jonathan Nappi'
-__email__      = 'moogar@comcast.net'
-__status__     = 'Beta'
-__title__      = '{} version {}'.format(__name__, __version__)
+__email__ = 'moogar@comcast.net'
+__status__ = 'Beta'
+__title__ = '{} version {}'.format(__name__, __version__)
 
-#for TV shows only, movies have their own IDs
 TV_GENREIDS = {'Comedy': 4000, 'Drama': 4001, 'Animation': 4002,
                'Action & Adventure': 4003, 'Classic': 4004, 'Kids': 4005,
                'Nonfiction': 4006, 'Reality TV': 4007,
                'Sci-Fi & Fantasy': 4008, 'Sports': 4009, 'Teens': 4010,
-               'Latino TV': 4011 }
+               'Latino TV': 4011}
 
 MOVIE_GENREIDS = {'Action & Adventure': 4401, 'Anime': 4402, 'Classics': 4403,
                   'Comedy': 4404, 'Documentary': 4405, 'Drama': 4406,
@@ -42,6 +42,7 @@ MOVIE_GENREIDS = {'Action & Adventure': 4401, 'Anime': 4402, 'Classics': 4403,
                   'Music Documentaries': 4423, 'Music Feature Films': 4424,
                   'Japanese Cinema': 4425, 'Jidaigeki': 4426,
                   'Tokusatsu': 4427, 'Korean Cinema': 4428}
+
 
 @contextmanager
 def ignored(*exceptions):
@@ -114,45 +115,60 @@ def get_xml_entry(name):
     return start + name + end
 
 
-def create_iTunes_xml(cast, directors, producers, writers):
+def strip_unicode(message):
+    """Strip unicode characters from strings. Useful for descriptions and
+    titles, which by default get returned from iTunes as unicode strings.
+    """
+    output = ''
+    for ch in message:
+        if unicodedata.normalize('NFKD', ch).encode('ascii', 'ignore') == '':
+            if ch == u'\u2019':
+                output += "'"
+        else:
+            output += unicodedata.normalize('NFKD', ch).encode('ascii',
+                                                               'ignore')
+    return output
+
+
+def create_itunes_xml(cast, directors, producers, writers):
     """Function for generating the rDNSatom XML data required for iTunes style
     metadata to be able to list the actors, directors, producers, and writers
     for any video media type to be tagged
     """
     xml = """<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD\ PLIST\ 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple//DTD\ PLIST\ 1.0//EN" {}>
 <plist version="1.0">
 <dict>
-"""
+""".format('"http://www.apple.com/DTDs/PropertyList-1.0.dtd"')
     if cast is not None and cast != []:
-        xml += "\t<key>cast</key>\n\t<array>\n"
+        xml += '\t<key>cast</key>\n\t<array>\n'
         for name in cast:
             if name is not None and len(name) > 0:
                 xml += get_xml_entry(name)
-        xml += "\t</array>\n"
+        xml += '\t</array>\n'
 
     if directors is not None and directors != []:
-        xml += "\t<key>directors</key>\n\t<array>\n"
+        xml += '\t<key>directors</key>\n\t<array>\n'
         for name in directors:
             if name is not None and len(name) > 0:
                 xml += get_xml_entry(name)
-        xml += "\t</array>\n"
+        xml += '\t</array>\n'
 
     if producers is not None and producers != []:
-        xml += "\t<key>producers</key>\n\t<array>\n"
+        xml += '\t<key>producers</key>\n\t<array>\n'
         for name in producers:
             if name is not None and len(name) > 0:
                 xml += get_xml_entry(name)
-        xml += "\t</array>\n"
+        xml += '\t</array>\n'
 
     if writers is not None and writers != []:
-        xml += "\t<key>screenwriters</key>\n\t<array>\n"
+        xml += '\t<key>screenwriters</key>\n\t<array>\n'
         for name in writers:
             if name is not None and len(name) > 0:
                 xml += get_xml_entry(name)
-        xml += "\t</array>\n"
+        xml += '\t</array>\n'
 
-    xml += "</dict>\n</plist>"
+    xml += '</dict>\n</plist>'
     return xml
 
 
@@ -170,6 +186,8 @@ class Tagger(object):
                             format='%(asctime)s %(levelname)s:%(message)s',
                             datefmt='%m/%d/%Y %I:%M:%S %p')
         self.logger = logging.getLogger(__name__)
+        self.file_name = None
+        self.params = dict()
 
     def has_artwork(self, url):
         """Attempts to download artwork from the provided URL and write it to a
@@ -179,32 +197,34 @@ class Tagger(object):
         """
         self.logger.info('Downloading Album Artwork...\n\tURL: {}'.format(url))
         req = requests.get(url)
-        if req.status_code >= 200 and req.status_code < 300:
-            f = open('.albumart.jpg','w')
+        if 200 <= req.status_code < 300:
+            f = open('.albumart.jpg', 'w')
             f.write(req.content)
             f.close()
             return True
         else:
-            self.logger.log('Album Art Not Downloaded: {}'.format(req.status_code))
+            message = 'Album Art Not Downloaded: {}'.format(req.status_code)
+            self.logger.log(message)
             return False
 
-    def do_tagging(self, filename, params):
-        """
-        Builds the actual AtomicParsley call for the provided file and then
+    def do_tagging(self):
+        """Builds the actual AtomicParsley call for the provided file and then
         makes the call to Atomic Parsley to actually write the metadata to the
         file.
         """
-        if 'artwork' in params.keys():
-            command = 'AtomicParsley "{}" --artwork REMOVE_ALL --output ".tmp.m4v"'.format(filename)
+        if 'artwork' in self.params.keys():
+            command = 'AtomicParsley "{}" --artwork REMOVE_ALL --output ".tmp.m4v"'.format(
+                self.file_name)
         else:
-            command = 'AtomicParsley "{}" --output ".tmp.m4v"'.format(filename)
-        keys = params.keys()
+            command = 'AtomicParsley "{}" --output ".tmp.m4v"'
+            command = command.format(self.file_name)
+        keys = self.params.keys()
         for key in keys:
             if key == 'rDNSatom':
-                command += ' --' + key + ' "' + str(params[key]) + \
+                command += ' --' + key + ' "' + str(self.params[key]) + \
                            '" name=iTunMOVI domain=com.apple.iTunes'
             else:
-                command += ' --' + key + ' "' + str(params[key]) + '\"'
+                command += ' --' + key + ' "' + str(self.params[key]) + '\"'
         # Need to prevent Non-zero exit status 2 AP errors from halting the 
         # entire program
         try:
@@ -213,27 +233,29 @@ class Tagger(object):
             print 'Metadata tagging complete. moving updated file'
             # if there was albumart, delete the temp file
             try:
-                subprocess.check_call('rm {}'.format(params['artwork']), 
+                subprocess.check_call('rm {}'.format(self.params['artwork']),
                                       shell=True)
             except KeyError:
                 print 'no artwork to delete'
-            move_to_trash(filename)
-            command = 'mv .tmp.m4v "{}"'.format(filename)
+            move_to_trash(self.file_name)
+            command = 'mv .tmp.m4v "{}"'.format(self.file_name)
             subprocess.check_call(command, shell=True)
         except subprocess.CalledProcessError as e:
-            print 'An error occured while tagging {}. AtomicParsley Error-Code: {}'.format(filename, e.returncode)
+            print 'An error occured while tagging {}. AtomicParsley ' \
+                  'Error-Code: {}'.format(self.file_name, e.returncode)
 
 
 class TVTagger(Tagger):
     """Tagger Subclass tailored to tagging TV Show metadata"""
-    def __init__(self, file_name, customs={}):
+
+    def __init__(self, file_name, customs=None):
         super(TVTagger, self).__init__()
         self.params = {'stik': 'TV Show', 'disk': '1/1', 'comment': '',
                        'apID': __email__}
         self.tvdb = Tvdb(actors=True)
         self.supported_types = ['.mp4', '.m4v']
         self.file_name = file_name
-        self.customs = customs
+        self.customs = customs or {}
 
     def do_itunes_search(self, queries):
         """This method pulls the provided queries out of their list and then 
@@ -247,13 +269,14 @@ class TVTagger(Tagger):
         season_data = None
         with ignored(AttributeError):
             # Get season data from iTunes
-            if season_results != []:
+            if season_results:
                 title_comparator = re.sub(r'\W+', ' ',
                                           self.params['TVShowName'])
                 for res in season_results:
                     comparative_title = re.sub(r'\W+', ' ', res.artist.name)
                     if title_comparator.lower() == comparative_title.lower() \
-                        and self.params['TVSeasonNum'] in res.get_album().name:
+                            and self.params[
+                                'TVSeasonNum'] in res.get_album().name:
                         season_data = res
                         break
                 # Copyright info
@@ -270,7 +293,7 @@ class TVTagger(Tagger):
         self.logger.info('Searching iTunes for {}'.format(search))
         episode_results = itunes.search_episode(search)
         episode_data = None
-        if episode_results != []:
+        if episode_results:
             episode_data = episode_results[0]
         else:
             self.logger.log('{} not found in iTunes'.format(search))
@@ -282,11 +305,13 @@ class TVTagger(Tagger):
             # Release Date
             parameters['year'] = episode_data.get_release_date()
             # short description, max length 255 characters
-            parameters['description'] = episode_data.get_short_description().strip()[:255]
-            parameters['description'] = string.replace(parameters['description'], '\n', '')
+            description = episode_data.get_short_description().strip()[:255]
+            description = string.replace(description, '\n', '')
+            parameters['description'] = strip_unicode(description)
             # long description
             parameters['longdesc'] = episode_data.get_long_description().strip()
-            parameters['longdesc'] = string.replace(parameters['longdesc'], '\n', '')
+            parameters['longdesc'] = string.replace(parameters['longdesc'],
+                                                    '\n', '')
             # iTunes Catalog ID
             parameters['cnID'] = episode_data.get_episodeID()
             # Content Rating
@@ -301,7 +326,6 @@ class TVTagger(Tagger):
         query_season = int(self.params['TVSeasonNum'])
         query_episode = int(self.params['TVEpisodeNum'])
         actors = []
-        directors = writers = ''
         if self.params['artist'] == 'Archer':
             self.params['artist'] = 'Archer (2009)'
         with ignored(Exception):
@@ -311,8 +335,10 @@ class TVTagger(Tagger):
             episode = show[query_season][query_episode]
             # iTunes descriptions can be terrible, use TVDB's when available
             self.params['description'] = episode['overview'].strip()[:255]
-            self.params['description'] = string.replace(self.params['description'], '"', '\"')
-            self.params['description'] = string.replace(self.params['description'], '\n', '')
+            self.params['description'] = string.replace(
+                self.params['description'], '"', '\"')
+            self.params['description'] = string.replace(
+                self.params['description'], '\n', '')
             # Different quote character can create AP non-zero exit status 2
             # problems
             # If longdesc from TVDB is longer than iTunes, use that instead
@@ -322,11 +348,15 @@ class TVTagger(Tagger):
             # parse out director names
             if directors is not None:
                 directors = directors.split('|')
+            else:
+                directors = ''
             writers = episode['writer']
             # parse out writer names
             if writers is not None:
                 writers = writers.split('|')
-            self.params['rDNSatom'] = create_iTunes_xml(actors, directors, [],
+            else:
+                writers = ''
+            self.params['rDNSatom'] = create_itunes_xml(actors, directors, [],
                                                         writers)
             new_release_date = episode['firstaired']
             if new_release_date != '':
@@ -367,26 +397,33 @@ class TVTagger(Tagger):
             try:
                 if int(episode) < 10:
                     episode = episode[1:].encode('utf-8').strip()
-                    self.params['TVEpisodeNum'] = self.params['tracknum'] = episode
+                    self.params['TVEpisodeNum'] = self.params[
+                        'tracknum'] = episode
                 else:
-                    self.params['TVEpisodeNum'] = self.params['tracknum'] = episode.encode('utf-8').strip()
+                    self.params['TVEpisodeNum'] = self.params[
+                        'tracknum'] = episode.encode('utf-8').strip()
             except ValueError:
                 try:
                     # Check to see if episode is in format 'Episode #'
                     episode = basename.split(' ')
-                    episode = episode[len(episode)-1][:-4].strip()
+                    episode = episode[len(episode) - 1][:-4].strip()
                     self.params['title'] = basename[:-4].strip()
                     if int(episode) < 10:
-                        self.params['TVEpisodeNum'] = self.params['tracknum'] = episode
+                        self.params['TVEpisodeNum'] = self.params[
+                            'tracknum'] = episode
                     else:
-                        self.params['TVEpisodeNum'] = self.params['tracknum'] = episode.encode('utf-8').strip()
+                        self.params['TVEpisodeNum'] = self.params[
+                            'tracknum'] = episode.encode('utf-8').strip()
                 except ValueError:
                     # No episode number could be found
                     pass
             # Format episode ID
-            self.params['TVEpisode'] = 'S{}E{}'.format(self.params['TVSeasonNum'], self.params['TVEpisodeNum'])
+            self.params['TVEpisode'] = 'S{}E{}'.format(
+                self.params['TVSeasonNum'], self.params['TVEpisodeNum'])
             # Format album name
-            self.params['album'] = '{}, Season {}'.format(self.params['artist'], self.params['TVSeasonNum'])
+            self.params['album'] = '{}, Season {}'.format(self.params['artist'],
+                                                          self.params[
+                                                              'TVSeasonNum'])
             # Build queries for iTunes search
             tmp = dict()
             tmp['season'] = '{} {}'.format(self.params['artist'],
@@ -414,13 +451,15 @@ class TVTagger(Tagger):
             self.do_tvdb_search()
             if self.params['artist'] == 'Archer (2009)':
                 self.params['artist'] = 'Archer'
-            if 'longdesc' not in self.params.keys() and 'description' in self.params.keys():
+            if 'longdesc' not in self.params.keys() and 'description' in \
+                    self.params.keys():
                 self.params['longdesc'] = self.params['description']
-            self.do_tagging(vid, self.params)
+            self.do_tagging()
 
 
 class MusicTagger(Tagger):
     """Tagger Subclass tailored to tagging Music metadata"""
+
     def __init__(self, file_name):
         super(MusicTagger, self).__init__()
         self.params = {'stik': 'Music', 'disk': '1/1', 'comment': '',
@@ -435,7 +474,8 @@ class MusicTagger(Tagger):
         results = itunes.search_track(query)
         track = None
         for result in results:
-            if self.params['title'] in result.get_name() and self.params['artist'] == result.get_artist().name:
+            if self.params['title'] in result.get_name() and \
+                            self.params['artist'] == result.get_artist().name:
                 track = result
                 break
         if track:
@@ -457,7 +497,7 @@ class MusicTagger(Tagger):
             self.params['cnID'] = track.get_id()
             if track.json['trackExplicitness'].lower() == 'explicit':
                 self.params['advisory'] = 'explicit'
-            self.do_tagging(song, self.params)
+            self.do_tagging()
         else:
             self.logger.err('{} not found in iTunes'.format(query))
 
@@ -469,7 +509,8 @@ class MusicTagger(Tagger):
         song = self.file_name
         extension = os.path.splitext(song)[-1].lower()
         if extension not in self.supported_types:
-            self.logger.err('{} given to be tagged, but {} is not a supported file type'.format(song, extension))
+            self.logger.err('{} given to be tagged, but {} is not a supported'
+                            ' file type'.format(song, extension))
         else:
             #filename (Track # Track Name)
             basename = string.replace(os.path.basename(song), '\\', '').strip()
@@ -477,7 +518,8 @@ class MusicTagger(Tagger):
             self.params['album'] = string.replace(os.path.dirname(song), '\\',
                                                   '')
             #folder containing folder (Artist Name)
-            self.params['artist'] = string.replace(os.path.dirname(self.params['album']), '\\', '')
+            self.params['artist'] = string.replace(
+                os.path.dirname(self.params['album']), '\\', '')
             self.params['album'] = os.path.basename(self.params['album'])
             self.params['artist'] = os.path.basename(self.params['artist'])
             #track number
@@ -490,6 +532,7 @@ class MusicTagger(Tagger):
 
 class MovieTagger(Tagger):
     """Tagger Subclass tailored to tagging Movie metadata"""
+
     def __init__(self, file_name):
         super(MovieTagger, self).__init__()
         self.params = {'stik': 'Movie', 'disk': '1/1', 'comment': '',
@@ -506,11 +549,11 @@ class MovieTagger(Tagger):
         movie_data = None
         for result in movie_results:
             result_name = result.get_name().lower()
-            result_name = result_name.translate(string.maketrans('', ''), 
+            result_name = result_name.translate(string.maketrans('', ''),
                                                 string.punctuation)
             result_name = string.replace(result_name, '  ', ' ')
             title = self.params['title'].lower()
-            title = title.translate(string.maketrans('', ''), 
+            title = title.translate(string.maketrans('', ''),
                                     string.punctuation)
             title = string.replace(title, '  ', ' ')
             if result_name == title:
@@ -518,17 +561,20 @@ class MovieTagger(Tagger):
         if movie_data is None:
             for result in movie_results:
                 if result.get_name().lower() == self.params['title'].lower():
+                    self.params['title'] = strip_unicode(result.get_name())
                     movie_data = result
                     break
                 else:
-                    words = self.params['title'].lower().translate(string.maketrans('', ''), string.punctuation).split(' ')
+                    words = self.params['title'].lower().translate(
+                        string.maketrans('', ''), string.punctuation).split(' ')
                     total = len(words)
                     matches = 0
-                    result_words = result.get_name().lower().translate(string.maketrans('', ''), string.punctuation).split(' ')
+                    result_words = result.get_name().lower().translate(
+                        string.maketrans('', ''), string.punctuation).split(' ')
                     for word in words:
                         if word in result_words:
                             matches += 1
-                    if float(matches)/float(total) > 0.8:
+                    if float(matches) / float(total) > 0.8:
                         movie_data = result
                         break
         with ignored(Exception):
@@ -545,7 +591,7 @@ class MovieTagger(Tagger):
             if self.params['advisory'] == 'notExplicit':
                 self.params['advisory'] = 'clean'
             # Description
-            self.params['longdesc'] = json['longDescription']
+            self.params['longdesc'] = strip_unicode(json['longDescription'])
             self.params['description'] = self.params['longdesc'][:250]
             if self.params['description'].count('"') % 2 != 0:
                 self.params['description'] += '"'
@@ -569,7 +615,8 @@ class MovieTagger(Tagger):
         try:
             results = tmdb.Movies(self.params['title'])
         except KeyError as e:
-            self.logger.err('TMDB Error {} Caught. Cancelling TMDB Search.'.format(e))
+            self.logger.err(
+                'TMDB Error {} Caught. Cancelling TMDB Search.'.format(e))
             return None
         movie = None
         for result in results.iter_results():
@@ -590,7 +637,8 @@ class MovieTagger(Tagger):
             if self.has_artwork(movie.get_poster()):
                 self.params['artwork'] = '.albumart.jpg'
             # Need to do some fancy querying to get movie's cast
-            credits = movie.getJSON(tmdb.config['urls']['movie.casts'] % movie.get_id(), 'en')
+            credits = movie.getJSON(tmdb.config['urls']['movie.casts'] %
+                                    movie.get_id(), 'en')
             # Actors
             actors = []
             for actor in credits['cast']:
@@ -598,13 +646,16 @@ class MovieTagger(Tagger):
             # Directors, Writers, Producers
             directors = producers = writers = []
             for member in credits['crew']:
-                if member['job'].lower() == 'director' and member['name'] not in directors:
+                if member['job'].lower() == 'director' and member['name'] not \
+                        in directors:
                     directors.append(member['name'])
-                elif member['job'].lower() == 'writer' and member['name'] not in writers:
+                elif member['job'].lower() == 'writer' and member['name'] not \
+                        in writers:
                     writers.append(member['name'])
-                elif member['job'].lower == 'producer' and member['name'] not in producers:
+                elif member['job'].lower == 'producer' and member['name'] not \
+                        in producers:
                     producers.append(member['name'])
-            self.params['rDNSatom'] = create_iTunes_xml(actors, directors,
+            self.params['rDNSatom'] = create_itunes_xml(actors, directors,
                                                         producers, writers)
 
     def collect_metadata(self):
@@ -615,7 +666,8 @@ class MovieTagger(Tagger):
         vid = self.file_name
         extension = os.path.splitext(vid)[-1].lower()
         if extension not in self.supported_types:
-            self.logger.err('{} given to be tagged, but {} is not a supported file type'.format(vid, extension))
+            self.logger.err('{} given to be tagged, but {} is not a '
+                            'supported file type'.format(vid, extension))
         else:
             self.logger.info('Tagging {}'.format(os.path.basename(vid)))
             # Title
