@@ -111,4 +111,4 @@ for index, file_name in enumerate(args.files):
         print 'No media type flag set'
         os._exit(os.EX_OK)
     tagger.collect_metadata()
-    print '{0:.2f}% done'.format(100.0*(float(index)/float(len(args.files))))
+    print '{0:.2f}% done'.format(100.0*(float(index+1)/float(len(args.files))))
