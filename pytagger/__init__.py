@@ -557,6 +557,7 @@ class MovieTagger(Tagger):
                                     string.punctuation)
             title = string.replace(title, '  ', ' ')
             if result_name == title:
+                self.params['title'] = strip_unicode(result.get_name())
                 movie_data = result
         if movie_data is None:
             for result in movie_results:
@@ -619,6 +620,18 @@ class MovieTagger(Tagger):
                 'TMDB Error {} Caught. Cancelling TMDB Search.'.format(e))
             return None
         movie = None
+        for result in results.iter_results():
+            result_name = result['title'].lower()
+            result_name = result_name.translate(string.maketrans('', ''),
+                                                string.punctuation)
+            result_name = string.replace(result_name, '  ', ' ')
+            title = self.params['title'].lower()
+            title = title.translate(string.maketrans('', ''),
+                                    string.punctuation)
+            title = string.replace(title, '  ', ' ')
+            if result_name == title:
+                self.params['title'] = strip_unicode(result.get_name())
+                movie = tmdb.Movie(result['id'])
         for result in results.iter_results():
             if result['title'].lower() == self.params['title'].lower():
                 movie = tmdb.Movie(result['id'])
