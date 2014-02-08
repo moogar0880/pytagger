@@ -70,7 +70,6 @@ def move_to_trash(file_path):
     if disk == 'Users':
         if os.path.exists(local_trash):
             command = 'mv "{}" "{}"'.format(file_path, local_trash)
-            print 'command: ', command
             subprocess.call(command, shell=True)
         else:
             print 'ERROR: Can not find Trash'
@@ -95,8 +94,6 @@ def move_to_trash(file_path):
             print 'ERROR: Can not find Trash'
         subprocess.call('mv "{}" "{}"'.format(file_path, local_trash),
                         shell=True)
-    else:
-        pass
 
 
 def dict_concat(d1, d2):
@@ -228,21 +225,24 @@ class Tagger(object):
         # Need to prevent Non-zero exit status 2 AP errors from halting the 
         # entire program
         try:
-            print 'Beginning Metadata tagging...'
+            self.logger.info('Beginning Metadata tagging...')
             subprocess.check_call(command, shell=True)
-            print 'Metadata tagging complete. moving updated file'
+            self.logger.info('Metadata tagging complete. moving updated file')
             # if there was albumart, delete the temp file
             try:
                 subprocess.check_call('rm {}'.format(self.params['artwork']),
                                       shell=True)
             except KeyError:
-                print 'no artwork to delete'
+                self.logger.debug('No artwork to delete')
             move_to_trash(self.file_name)
             command = 'mv .tmp.m4v "{}"'.format(self.file_name)
             subprocess.check_call(command, shell=True)
         except subprocess.CalledProcessError as e:
-            print 'An error occured while tagging {}. AtomicParsley ' \
-                  'Error-Code: {}'.format(self.file_name, e.returncode)
+            error1 = 'An error occured while tagging {}.'
+            error2 = 'AtomicParsley Error-Code: {}'
+            error = ' '.join([error1, error2])
+            error = error.format(self.file_name, e.returncode)
+            self.logger.error(error)
 
 
 class TVTagger(Tagger):
@@ -673,7 +673,6 @@ class MovieTagger(Tagger):
             # Title
             self.params['title'] = string.replace(os.path.basename(vid),
                                                   '\\', '').strip()[:-4]
-            print self.params['title']
             self.do_itunes_search()
             self.do_tmdb_search()
-            self.do_tagging(vid, self.params)
+            self.do_tagging()
