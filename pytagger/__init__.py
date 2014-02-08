@@ -116,15 +116,18 @@ def strip_unicode(message):
     """Strip unicode characters from strings. Useful for descriptions and
     titles, which by default get returned from iTunes as unicode strings.
     """
-    output = ''
-    for ch in message:
-        if unicodedata.normalize('NFKD', ch).encode('ascii', 'ignore') == '':
-            if ch == u'\u2019':
-                output += "'"
-        else:
-            output += unicodedata.normalize('NFKD', ch).encode('ascii',
-                                                               'ignore')
-    return output
+    if type(message) == unicode:
+        output = ''
+        for ch in message:
+            if unicodedata.normalize('NFKD', ch).encode('ascii', 'ignore') == '':
+                if ch == u'\u2019':
+                    output += "'"
+            else:
+                output += unicodedata.normalize('NFKD', ch).encode('ascii',
+                                                                   'ignore')
+        return output
+    else:
+        return message
 
 
 def create_itunes_xml(cast, directors, producers, writers):
