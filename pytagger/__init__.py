@@ -630,7 +630,7 @@ class MovieTagger(Tagger):
                                     string.punctuation)
             title = string.replace(title, '  ', ' ')
             if result_name == title:
-                self.params['title'] = strip_unicode(result.get_name())
+                self.params['title'] = result.get_name()
                 movie = tmdb.Movie(result['id'])
         for result in results.iter_results():
             if result['title'].lower() == self.params['title'].lower():
