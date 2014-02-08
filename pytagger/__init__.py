@@ -505,7 +505,15 @@ class MovieTagger(Tagger):
         movie_results = itunes.search_movie(self.params['title'])
         movie_data = None
         for result in movie_results:
-            if result.get_name.lower() == self.params['title'].lower():
+            result_name = result.get_name().lower()
+            result_name = result_name.translate(string.maketrans('', ''), 
+                                                string.punctuation)
+            result_name = string.replace(result_name, '  ', ' ')
+            title = self.params['title'].lower()
+            title = title.translate(string.maketrans('', ''), 
+                                    string.punctuation)
+            title = string.replace(title, '  ', ' ')
+            if result_name == title:
                 movie_data = result
         if movie_data is None:
             for result in movie_results:
@@ -538,7 +546,9 @@ class MovieTagger(Tagger):
                 self.params['advisory'] = 'clean'
             # Description
             self.params['longdesc'] = json['longDescription']
-            self.params['description'] = self.params['longdesc'][:253]
+            self.params['description'] = self.params['longdesc'][:250]
+            if self.params['description'].count('"') % 2 != 0:
+                self.params['description'] += '"'
             # Genre
             self.params['genre'] = json['primaryGenreName']
             # Release Date
