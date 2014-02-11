@@ -250,8 +250,7 @@ class Tagger(object):
 
 class TVTagger(Tagger):
     """Tagger Subclass tailored to tagging TV Show metadata"""
-
-    def __init__(self, file_name, customs=None):
+    def __init__(self, file_name, customs=None, auto_tag=True):
         super(TVTagger, self).__init__()
         self.params = {'stik': 'TV Show', 'disk': '1/1', 'comment': '',
                        'apID': __email__}
@@ -259,6 +258,8 @@ class TVTagger(Tagger):
         self.supported_types = ['.mp4', '.m4v']
         self.file_name = file_name
         self.customs = customs or {}
+        # if auto_tag:
+        #     self.do_tagging()
 
     def do_itunes_search(self, queries):
         """This method pulls the provided queries out of their list and then 
@@ -331,6 +332,8 @@ class TVTagger(Tagger):
         actors = []
         if self.params['artist'] == 'Archer':
             self.params['artist'] = 'Archer (2009)'
+        elif self.params['artist'] == 'Shameless':
+            self.params['artist'] = 'Shameless (US)'
         with ignored(Exception):
             show = self.tvdb[self.params['artist']]
             for actor in show['_actors']:
@@ -462,13 +465,14 @@ class TVTagger(Tagger):
 
 class MusicTagger(Tagger):
     """Tagger Subclass tailored to tagging Music metadata"""
-
-    def __init__(self, file_name):
+    def __init__(self, file_name, auto_tag=True):
         super(MusicTagger, self).__init__()
         self.params = {'stik': 'Music', 'disk': '1/1', 'comment': '',
                        'apID': __email__, 'output': 'tmp.m4a'}
         self.supported_types = ['.m4a']
         self.file_name = file_name
+        # if auto_tag:
+        #     self.do_tagging()
 
     def do_itunes_search(self, query):
         """This method uses the provided query for performing an iTunes audio
@@ -535,13 +539,14 @@ class MusicTagger(Tagger):
 
 class MovieTagger(Tagger):
     """Tagger Subclass tailored to tagging Movie metadata"""
-
-    def __init__(self, file_name):
+    def __init__(self, file_name, auto_tag=True):
         super(MovieTagger, self).__init__()
         self.params = {'stik': 'Movie', 'disk': '1/1', 'comment': '',
                        'apID': __email__, 'output': '.tmp.m4v'}
         self.supported_types = ['.mp4', '.m4v']
         self.file_name = file_name
+        # if auto_tag:
+        #     self.do_tagging()
 
     def do_itunes_search(self):
         """This method pulls the title of the current Movie out of the
