@@ -1,7 +1,7 @@
 #!/usr/bin/python
 import os
 import argparse
-import pytagger        
+import pytagger
 
 
 def parse_arguments():
