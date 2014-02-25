@@ -14,6 +14,7 @@ import itunes
 from tvdb_api import Tvdb
 import tvdb_api
 import tmdb
+from trakt import configure, TVShow, Movie
 
 __name__ = 'pytagger'
 __doc__ = 'A python backend to iTunes style metadata tagging'
@@ -255,6 +256,8 @@ class TVTagger(Tagger):
         self.params = {'stik': 'TV Show', 'disk': '1/1', 'comment': '',
                        'apID': __email__}
         self.tvdb = Tvdb(actors=True)
+        trakt_key = '888dbf16c37694fd8633f0f7e423dfc5'
+        configure(trakt_key)
         self.supported_types = ['.mp4', '.m4v']
         self.file_name = file_name
         self.customs = customs or {}
@@ -368,7 +371,28 @@ class TVTagger(Tagger):
             if new_release_date != '':
                 self.params['year'] = new_release_date + 'T00:00:00Z'
 
-    def collect_metadata(self):
+    def do_trakt_search(self):
+        """Search Trakt.TV for data on the episode being tagged"""
+        show_name = self.params['TVShowName']
+        season_num = int(self.params['TVSeasonNum']) - 1
+        episode_num = int(self.params['TVEpisodeNum']) - 1
+        show = TVShow(show_name)
+        episode = show.search_season(season_num).episodes[episode_num]
+        self.params['contentRating'] = show.certification
+        self.params['genre'] = show.genres[0]
+        self.params['TVNetwork'] = show.network
+        actors = []
+        for actor in show.people['actors']:
+            for key, val in actor.items():
+                if key == 'name':
+                    actors.append(val)
+        # self.params['rDNSatom'] = create_itunes_xml(actors, [], [], [])
+        self.params['year'] = episode.first_aired_iso
+        self.params['description'] = self.params['longdesc'] = episode.overview
+        self.params['TVShowName'] = episode.show
+        self.params['title'] = episode.title
+
+    def collect_metadata(self, trakt=False):
         """Checks that each file passed in is of a valid type. Providing that
         the file was of the correct type, the various searches are performed and
         all metadata is gathered.
@@ -385,7 +409,7 @@ class TVTagger(Tagger):
         else:
             # File name (Episode # Episode Name)
             basename = string.replace(os.path.basename(vid), '\\', '').strip()
-            self.logger.info("Tagging {}".format(basename))
+            self.logger.info('Tagging {}'.format(basename))
             # folder containing file (Season #)
             sea_name = string.replace(os.path.dirname(vid), '\\', '')
             # folder containing folder (Show Name)
@@ -460,6 +484,8 @@ class TVTagger(Tagger):
             if 'longdesc' not in self.params.keys() and 'description' in \
                     self.params.keys():
                 self.params['longdesc'] = self.params['description']
+            if trakt:
+                self.do_trakt_search()
             self.do_tagging()
 
 
@@ -545,6 +571,8 @@ class MovieTagger(Tagger):
                        'apID': __email__, 'output': '.tmp.m4v'}
         self.supported_types = ['.mp4', '.m4v']
         self.file_name = file_name
+        trakt_key = '888dbf16c37694fd8633f0f7e423dfc5'
+        configure(trakt_key)
         # if auto_tag:
         #     self.do_tagging()
 
@@ -682,6 +710,16 @@ class MovieTagger(Tagger):
             self.params['rDNSatom'] = create_itunes_xml(actors, directors,
                                                         producers, writers)
 
+    def do_trakt_search(self):
+        """Search Trakt.TV for data on the movie being tagged"""
+        title = self.params['title']
+        movie = Movie(title)
+        self.params['contentRating'] = movie.certification
+        self.params['genre'] = movie.genres[0]
+        self.params['description'] = self.params['longdesc'] = movie.overview
+        self.params['year'] = movie.released_iso
+        self.params['title'] = movie.title
+
     def collect_metadata(self):
         """Checks that each file passed in is of a valid type. Providing that
         the file was of the correct type, the various searches are performed and
@@ -699,4 +737,5 @@ class MovieTagger(Tagger):
                                                   '\\', '').strip()[:-4]
             self.do_itunes_search()
             self.do_tmdb_search()
+            # self.do_trakt_search()
             self.do_tagging()
