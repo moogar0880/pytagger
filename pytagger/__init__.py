@@ -293,7 +293,7 @@ class TVTagger(Tagger):
                 if self.has_artwork(url):
                     parameters['artwork'] = '.albumart.jpg'
             if season_data is None:
-                self.logger.log('{} not found in iTunes'.format(search))
+                self.logger.debug('{} not found in iTunes'.format(search))
 
         #Gather episode information
         search = queries['episode']
@@ -303,7 +303,7 @@ class TVTagger(Tagger):
         if episode_results:
             episode_data = episode_results[0]
         else:
-            self.logger.log('{} not found in iTunes'.format(search))
+            self.logger.debug('{} not found in iTunes'.format(search))
         with ignored(AttributeError):
             # Genre
             parameters['genre'] = episode_data.get_genre()

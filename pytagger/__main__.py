@@ -89,7 +89,7 @@ def gather_interactive_data(file_list):
     return file_poll(quest, to_ret)
 
 args = parse_arguments()
-customArgs = {}
+customArgs = [{} for f in args.files]
 if not args.auto:
     customArgs = gather_interactive_data(args.files)
 print customArgs
