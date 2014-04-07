@@ -237,9 +237,13 @@ class TVEpisode(BaseAPI):
 
 class Movie(BaseAPI):
     """A Class representing a Movie object"""
-    def __init__(self, title):
+    def __init__(self, title, year=None):
         super(Movie, self).__init__()
         self.title = title
+        try:
+            self.year = int(year)
+        except Exception:
+            self.year = year
         self.released_iso = None
         self.url_extension = 'search/movies/' + api_key + '?query='
         self.search(self.title)
@@ -251,17 +255,26 @@ class Movie(BaseAPI):
         data = None
         if response.status_code == 200:
             data = json.loads(response.content)
-        if data is not None:
-            data = data[0]
-            for key, val in data.items():
-                setattr(self, key, val)
-        try:
-            release = getattr(self, 'released')
-            release = float(release)
-            utc = datetime.utcfromtimestamp(release)
-            self.released_iso = str(utc).replace(' ', 'T')
-        except AttributeError:
-            pass
+            if data is not None and self.year is not None:
+                for movie in data:
+                    title = movie['title'].lower()
+                    if movie['year'] == self.year and title == self.title.lower():
+                        data = movie
+                        break
+                if isinstance(data, list):
+                    data = data[0]
+            elif data is not None and self.year is None:
+                data = data[0]
+            if data is not None and data != []:
+                for key, val in data.items():
+                    setattr(self, key, val)
+            try:
+                release = getattr(self, 'released')
+                release = float(release)
+                utc = datetime.utcfromtimestamp(release)
+                self.released_iso = str(utc).replace(' ', 'T')
+            except AttributeError:
+                pass
 
 
 class Calendar(BaseAPI):

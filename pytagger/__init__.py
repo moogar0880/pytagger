@@ -8,6 +8,7 @@ import re
 import logging
 from datetime import date
 from contextlib import contextmanager
+from pprint import pformat
 import unicodedata
 import requests
 import itunes
@@ -19,7 +20,7 @@ from trakt import configure, TVShow, Movie
 __name__ = 'pytagger'
 __doc__ = 'A python backend to iTunes style metadata tagging'
 __author__ = 'Jonathan Nappi'
-__version__ = '0.6'
+__version__ = '0.9'
 __license__ = 'GPL'
 __maintainer__ = 'Jonathan Nappi'
 __email__ = 'moogar@comcast.net'
@@ -183,7 +184,7 @@ class Tagger(object):
                                                                    log_date))
         if not os.path.exists(os.path.join(home, '.pytagger_logs')):
             os.mkdir(os.path.join(home, '.pytagger_logs'))
-        logging.basicConfig(filename=name, level=logging.INFO,
+        logging.basicConfig(filename=name, level=logging.CRITICAL,
                             format='%(asctime)s %(levelname)s:%(message)s',
                             datefmt='%m/%d/%Y %I:%M:%S %p')
         self.logger = logging.getLogger(__name__)
@@ -199,7 +200,8 @@ class Tagger(object):
         self.logger.info('Downloading Album Artwork...\n\tURL: {}'.format(url))
         req = requests.get(url)
         if 200 <= req.status_code < 300:
-            f = open('.albumart.jpg', 'w')
+            file_name = '.albumart{}.jpg'.format(str(os.getpid()))
+            f = open(file_name, 'w')
             f.write(req.content)
             f.close()
             return True
@@ -213,12 +215,12 @@ class Tagger(object):
         makes the call to Atomic Parsley to actually write the metadata to the
         file.
         """
+        tmp_file_name = '.tmp{}.m4v'.format(str(os.getpid()))
         if 'artwork' in self.params.keys():
-            command = 'AtomicParsley "{}" --artwork REMOVE_ALL --output ".tmp.m4v"'.format(
-                self.file_name)
+            command = 'AtomicParsley "{}" --artwork REMOVE_ALL --output "{}"'
         else:
-            command = 'AtomicParsley "{}" --output ".tmp.m4v"'
-            command = command.format(self.file_name)
+            command = 'AtomicParsley "{}" --output "{}"'
+        command = command.format(self.file_name, tmp_file_name)
         keys = self.params.keys()
         for key in keys:
             if key == 'rDNSatom':
@@ -229,8 +231,9 @@ class Tagger(object):
         # Need to prevent Non-zero exit status 2 AP errors from halting the 
         # entire program
         try:
+            null = open(os.devnull)
             self.logger.info('Beginning Metadata tagging...')
-            subprocess.check_call(command, shell=True)
+            subprocess.check_call(command, shell=True, stdout=null)
             self.logger.info('Metadata tagging complete. moving updated file')
             # if there was albumart, delete the temp file
             try:
@@ -239,7 +242,7 @@ class Tagger(object):
             except KeyError:
                 self.logger.debug('No artwork to delete')
             move_to_trash(self.file_name)
-            command = 'mv .tmp.m4v "{}"'.format(self.file_name)
+            command = 'mv {} "{}"'.format(tmp_file_name, self.file_name)
             subprocess.check_call(command, shell=True)
         except subprocess.CalledProcessError as e:
             error1 = 'An error occured while tagging {}.'
@@ -291,7 +294,8 @@ class TVTagger(Tagger):
                 url = season_data.get_artwork()
                 url = string.replace(url['60'], '60x60-50', '600x600-75')
                 if self.has_artwork(url):
-                    parameters['artwork'] = '.albumart.jpg'
+                    pid = str(os.getpid())
+                    parameters['artwork'] = '.albumart{}.jpg'.format(pid)
             if season_data is None:
                 self.logger.debug('{} not found in iTunes'.format(search))
 
@@ -374,23 +378,46 @@ class TVTagger(Tagger):
     def do_trakt_search(self):
         """Search Trakt.TV for data on the episode being tagged"""
         show_name = self.params['TVShowName']
-        season_num = int(self.params['TVSeasonNum']) - 1
-        episode_num = int(self.params['TVEpisodeNum']) - 1
+        season_num = int(self.params['TVSeasonNum'])
+        if int(self.params['TVEpisodeNum']) != 0:
+            episode_num = int(self.params['TVEpisodeNum']) - 1
+        else:
+            int(self.params['TVEpisodeNum'])
+        msg = '{} : {} : {}'.format(show_name, season_num, episode_num)
+        self.logger.warning(msg)
         show = TVShow(show_name)
+        self.logger.warning(pformat(show.search_season(season_num).__dict__))
         episode = show.search_season(season_num).episodes[episode_num]
+        self.logger.warning(pformat(episode.__dict__))
+        # print show.certification
+        # if show.certification != '':
         self.params['contentRating'] = show.certification
         self.params['genre'] = show.genres[0]
         self.params['TVNetwork'] = show.network
         actors = []
         for actor in show.people['actors']:
-            for key, val in actor.items():
-                if key == 'name':
-                    actors.append(val)
+            if 'name' in actor:
+                actors.append(actor['name'])
         # self.params['rDNSatom'] = create_itunes_xml(actors, [], [], [])
         self.params['year'] = episode.first_aired_iso
         self.params['description'] = self.params['longdesc'] = episode.overview
-        self.params['TVShowName'] = episode.show
+        if len(self.params['description']) > 250:
+            self.params['description'] = self.params['description'][:250]
+            count = 0
+            for ch in self.params['description']:
+                if ch == '"':
+                    count += 1
+            if count % 2 != 0:
+                self.params['description'] += '"'
+        self.params['TVShowName'] = self.params['artist'] = episode.show
         self.params['title'] = episode.title
+        # Reformat fields
+        self.params['albumArtist'] = episode.show
+         # Reformat album name
+        self.params['album'] = '{}, Season {}'.format(self.params['artist'],
+                                                      self.params['TVSeasonNum'])
+        if self.params['genre'] in TV_GENREIDS:
+            self.params['geID'] = TV_GENREIDS[self.params['genre']]
 
     def collect_metadata(self, trakt=False):
         """Checks that each file passed in is of a valid type. Providing that
@@ -518,7 +545,8 @@ class MusicTagger(Tagger):
             url = track.artwork
             url = string.replace(albumArt['60'], '60x60-50', '600x600-75')
             if self.has_artwork(url):
-                self.params['artwork'] = '.albumart.jpg'
+                pid = str(os.getpid())
+                parameters['artwork'] = '.albumart{}.jpg'.format(pid)
             # Genre
             self.params['genre'] = track.get_genre()
             album = track.get_album()
@@ -620,7 +648,8 @@ class MovieTagger(Tagger):
             url = movie_data.get_artwork()
             url = string.replace(url['60'], '60x60-50', '600x600-75')
             if self.has_artwork(url):
-                self.params['artwork'] = '.albumart.jpg'
+                pid = str(os.getpid())
+                parameters['artwork'] = '.albumart{}.jpg'.format(pid)
             json = movie_data.json
             # Content Rating
             self.params['contentRating'] = json['contentAdvisoryRating']
@@ -687,7 +716,8 @@ class MovieTagger(Tagger):
             if 'genre' not in self.params.keys() and movie.get_genres() != []:
                 self.params['genre'] = movie.get_genres()[0]['name']
             if self.has_artwork(movie.get_poster()):
-                self.params['artwork'] = '.albumart.jpg'
+                pid = str(os.getpid())
+                parameters['artwork'] = '.albumart{}.jpg'.format(pid)
             # Need to do some fancy querying to get movie's cast
             credits = movie.getJSON(tmdb.config['urls']['movie.casts'] %
                                     movie.get_id(), 'en')
@@ -713,12 +743,20 @@ class MovieTagger(Tagger):
     def do_trakt_search(self):
         """Search Trakt.TV for data on the movie being tagged"""
         title = self.params['title']
-        movie = Movie(title)
+        year = None
+        if '(' in title and ')' in title:
+            year = title[title.find('(')+1:title.find(')')].strip()
+            title = ' '.join(title.split()[:-1]).strip()
+        movie = Movie(title, year=year)
         self.params['contentRating'] = movie.certification
         self.params['genre'] = movie.genres[0]
         self.params['description'] = self.params['longdesc'] = movie.overview
         self.params['year'] = movie.released_iso
         self.params['title'] = movie.title
+        if 'artwork' not in self.params and 'poster' in movie.images:
+            if self.has_artwork(movie.images['poster']):
+                pid = str(os.getpid())
+                parameters['artwork'] = '.albumart{}.jpg'.format(pid)
 
     def collect_metadata(self):
         """Checks that each file passed in is of a valid type. Providing that
@@ -736,6 +774,6 @@ class MovieTagger(Tagger):
             self.params['title'] = string.replace(os.path.basename(vid),
                                                   '\\', '').strip()[:-4]
             self.do_itunes_search()
-            self.do_tmdb_search()
-            # self.do_trakt_search()
+            # self.do_tmdb_search()
+            self.do_trakt_search()
             self.do_tagging()

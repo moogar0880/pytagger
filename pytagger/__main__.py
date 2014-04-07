@@ -1,7 +1,10 @@
 #!/usr/bin/python
 import os
+import sys
 import argparse
 import pytagger
+from time import sleep
+from multiprocessing import Process
 
 
 def parse_arguments():
@@ -92,13 +95,13 @@ args = parse_arguments()
 customArgs = [{} for f in args.files]
 if not args.auto:
     customArgs = gather_interactive_data(args.files)
-print customArgs
 tagger = None
 
 if len(args.files) == 0:
     print 'No files given to tag'
     os._exit(os.EX_OK)
 
+taggers = []
 for index, file_name in enumerate(args.files):
     if args.TV:
         tagger = pytagger.TVTagger(file_name=file_name,
@@ -110,5 +113,32 @@ for index, file_name in enumerate(args.files):
     else:
         print 'No media type flag set'
         os._exit(os.EX_OK)
-    tagger.collect_metadata()
-    print '{0:.2f}% done'.format(100.0*(float(index+1)/float(len(args.files))))
+    taggers.append(tagger)
+children = []
+for tagger in taggers:
+    if args.TV:
+        proc = Process(target=tagger.collect_metadata, kwargs={'trakt': True})
+        children.append(proc)
+        proc.start()
+    else:
+        proc = Process(target=tagger.collect_metadata)
+        children.append(proc)
+        proc.start()
+
+progress = 0.0
+total = 100.0
+joined = []
+while len(joined) < len(children):
+    progress += 1.02
+    for child in children:
+        if not child.is_alive():
+            child.join()
+            joined.append(child)
+            progress = float(len(joined))
+        msg = '\r{0:.2f}% Done'.format(100.0*(float(progress)/float(total)))
+        sys.stdout.write(msg)
+        sys.stdout.flush()
+    sleep(2)
+msg = '\r100.00% Done\n'
+sys.stdout.write(msg)
+sys.stdout.flush()
