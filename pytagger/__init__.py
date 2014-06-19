@@ -1,26 +1,23 @@
-import string
+import os
+import re
 import sys
 reload(sys)
 sys.setdefaultencoding('utf8')
-import os
-import subprocess
-import re
+import itunes
+import string
 import logging
+import requests
+import subprocess
+import unicodedata
+from trakt import configure, TVShow, Movie
+from pprint import pformat
 from datetime import date
 from contextlib import contextmanager
-from pprint import pformat
-import unicodedata
-import requests
-import itunes
-from tvdb_api import Tvdb
-import tvdb_api
-import tmdb
-from trakt import configure, TVShow, Movie
 
 __name__ = 'pytagger'
 __doc__ = 'A python backend to iTunes style metadata tagging'
 __author__ = 'Jonathan Nappi'
-__version__ = '0.9'
+__version__ = '0.6'
 __license__ = 'GPL'
 __maintainer__ = 'Jonathan Nappi'
 __email__ = 'moogar@comcast.net'
@@ -264,8 +261,6 @@ class TVTagger(Tagger):
         self.supported_types = ['.mp4', '.m4v']
         self.file_name = file_name
         self.customs = customs or {}
-        # if auto_tag:
-        #     self.do_tagging()
 
     def do_itunes_search(self, queries):
         """This method pulls the provided queries out of their list and then 
@@ -329,52 +324,6 @@ class TVTagger(Tagger):
             parameters['contentRating'] = episode_data.get_content_rating()
         return parameters
 
-    def do_tvdb_search(self):
-        """By pulling in relevant pre-recieved metadata fields perform a search
-        on the TVDB for season and episode metadata
-        """
-        # TVDB query for cast, writers, director
-        query_season = int(self.params['TVSeasonNum'])
-        query_episode = int(self.params['TVEpisodeNum'])
-        actors = []
-        if self.params['artist'] == 'Archer':
-            self.params['artist'] = 'Archer (2009)'
-        elif self.params['artist'] == 'Shameless':
-            self.params['artist'] = 'Shameless (US)'
-        with ignored(Exception):
-            show = self.tvdb[self.params['artist']]
-            for actor in show['_actors']:
-                actors.append(actor['name'])
-            episode = show[query_season][query_episode]
-            # iTunes descriptions can be terrible, use TVDB's when available
-            self.params['description'] = episode['overview'].strip()[:255]
-            self.params['description'] = string.replace(
-                self.params['description'], '"', '\"')
-            self.params['description'] = string.replace(
-                self.params['description'], '\n', '')
-            # Different quote character can create AP non-zero exit status 2
-            # problems
-            # If longdesc from TVDB is longer than iTunes, use that instead
-            if len(self.params['description']) > len(self.params['longdesc']):
-                self.params['longdesc'] = self.params['description']
-            directors = episode['director']
-            # parse out director names
-            if directors is not None:
-                directors = directors.split('|')
-            else:
-                directors = ''
-            writers = episode['writer']
-            # parse out writer names
-            if writers is not None:
-                writers = writers.split('|')
-            else:
-                writers = ''
-            self.params['rDNSatom'] = create_itunes_xml(actors, directors, [],
-                                                        writers)
-            new_release_date = episode['firstaired']
-            if new_release_date != '':
-                self.params['year'] = new_release_date + 'T00:00:00Z'
-
     def do_trakt_search(self):
         """Search Trakt.TV for data on the episode being tagged"""
         show_name = self.params['TVShowName']
@@ -389,8 +338,7 @@ class TVTagger(Tagger):
         self.logger.warning(pformat(show.search_season(season_num).__dict__))
         episode = show.search_season(season_num).episodes[episode_num]
         self.logger.warning(pformat(episode.__dict__))
-        # print show.certification
-        # if show.certification != '':
+
         self.params['contentRating'] = show.certification
         self.params['genre'] = show.genres[0]
         self.params['TVNetwork'] = show.network
@@ -398,7 +346,7 @@ class TVTagger(Tagger):
         for actor in show.people['actors']:
             if 'name' in actor:
                 actors.append(actor['name'])
-        # self.params['rDNSatom'] = create_itunes_xml(actors, [], [], [])
+        
         self.params['year'] = episode.first_aired_iso
         self.params['description'] = self.params['longdesc'] = episode.overview
         if len(self.params['description']) > 250:
@@ -521,11 +469,9 @@ class MusicTagger(Tagger):
     def __init__(self, file_name, auto_tag=True):
         super(MusicTagger, self).__init__()
         self.params = {'stik': 'Music', 'disk': '1/1', 'comment': '',
-                       'apID': __email__, 'output': 'tmp.m4a'}
+                       'apID': __email__}
         self.supported_types = ['.m4a']
         self.file_name = file_name
-        # if auto_tag:
-        #     self.do_tagging()
 
     def do_itunes_search(self, query):
         """This method uses the provided query for performing an iTunes audio
@@ -596,13 +542,11 @@ class MovieTagger(Tagger):
     def __init__(self, file_name, auto_tag=True):
         super(MovieTagger, self).__init__()
         self.params = {'stik': 'Movie', 'disk': '1/1', 'comment': '',
-                       'apID': __email__, 'output': '.tmp.m4v'}
+                       'apID': __email__}
         self.supported_types = ['.mp4', '.m4v']
         self.file_name = file_name
         trakt_key = '888dbf16c37694fd8633f0f7e423dfc5'
         configure(trakt_key)
-        # if auto_tag:
-        #     self.do_tagging()
 
     def do_itunes_search(self):
         """This method pulls the title of the current Movie out of the
@@ -671,75 +615,6 @@ class MovieTagger(Tagger):
             # Catalog ID
             self.params['cnID'] = movie_data.get_id()
 
-    def do_tmdb_search(self):
-        """This method pulls the title of the current Movie out of the
-        parameters dictionary. This title is then used as the query for a TMDB
-        movies search
-        """
-        self.logger.info('Searching TMDB')
-        # Insert TMDB API key here
-        api_key = '7b4534c44a0601d017210529c4cb2e5c'
-        table = string.maketrans('', '')
-        tmdb.configure(api_key)
-        try:
-            results = tmdb.Movies(self.params['title'])
-        except KeyError as e:
-            self.logger.err(
-                'TMDB Error {} Caught. Cancelling TMDB Search.'.format(e))
-            return None
-        movie = None
-        for result in results.iter_results():
-            result_name = result['title'].lower()
-            result_name = strip_unicode(result_name)
-            result_name = result_name.translate(table, string.punctuation)
-            result_name = string.replace(result_name, '  ', ' ')
-            title = self.params['title'].lower()
-            title = title.translate(table, string.punctuation)
-            title = string.replace(title, '  ', ' ')
-            if result_name == title:
-                self.params['title'] = strip_unicode(result['title'])
-                movie = tmdb.Movie(result['id'])
-        for result in results.iter_results():
-            if result['title'].lower() == self.params['title'].lower():
-                movie = tmdb.Movie(result['id'])
-                break
-        if movie is not None:
-            # Release Date
-            self.params['year'] = movie.get_release_date()
-            # Short Description
-            overview = movie.get_overview()
-            self.params['description'] = strip_unicode(overview[:250])
-            # Long Description
-            self.params['longdesc'] = strip_unicode(overview)
-            # If iTunes data was not found, fill in the fields from the iTunes
-            # search
-            if 'genre' not in self.params.keys() and movie.get_genres() != []:
-                self.params['genre'] = movie.get_genres()[0]['name']
-            if self.has_artwork(movie.get_poster()):
-                pid = str(os.getpid())
-                parameters['artwork'] = '.albumart{}.jpg'.format(pid)
-            # Need to do some fancy querying to get movie's cast
-            credits = movie.getJSON(tmdb.config['urls']['movie.casts'] %
-                                    movie.get_id(), 'en')
-            # Actors
-            actors = []
-            for actor in credits['cast']:
-                actors.append(actor['name'])
-            # Directors, Writers, Producers
-            directors = producers = writers = []
-            for member in credits['crew']:
-                if member['job'].lower() == 'director' and member['name'] not \
-                        in directors:
-                    directors.append(member['name'])
-                elif member['job'].lower() == 'writer' and member['name'] not \
-                        in writers:
-                    writers.append(member['name'])
-                elif member['job'].lower == 'producer' and member['name'] not \
-                        in producers:
-                    producers.append(member['name'])
-            self.params['rDNSatom'] = create_itunes_xml(actors, directors,
-                                                        producers, writers)
-
     def do_trakt_search(self):
         """Search Trakt.TV for data on the movie being tagged"""
         title = self.params['title']
@@ -756,7 +631,7 @@ class MovieTagger(Tagger):
         if 'artwork' not in self.params and 'poster' in movie.images:
             if self.has_artwork(movie.images['poster']):
                 pid = str(os.getpid())
-                parameters['artwork'] = '.albumart{}.jpg'.format(pid)
+                self.params['artwork'] = '.albumart{}.jpg'.format(pid)
 
     def collect_metadata(self):
         """Checks that each file passed in is of a valid type. Providing that
@@ -774,6 +649,5 @@ class MovieTagger(Tagger):
             self.params['title'] = string.replace(os.path.basename(vid),
                                                   '\\', '').strip()[:-4]
             self.do_itunes_search()
-            # self.do_tmdb_search()
             self.do_trakt_search()
             self.do_tagging()
