@@ -2,9 +2,9 @@
 import os
 import sys
 import argparse
-import pytagger
+
 from time import sleep
-from multiprocessing import Process
+from multiprocessing import Process, cpu_count
 
 
 def parse_arguments():
@@ -18,6 +18,9 @@ def parse_arguments():
                         help='declare media type as Movie')
     parser.add_argument('-M', '--Music', action="store_true", 
                         help='declare media type as Music')
+    parser.add_argument('-n', '--num_procs', action='store',
+                        default=cpu_count() * 2,
+                        help='Set the number of files to tag simultaneously')
     parser.add_argument('files', nargs='*')
     return parser.parse_args()
 
@@ -91,54 +94,56 @@ def gather_interactive_data(file_list):
              'all, e to finish, q to quit: '
     return file_poll(quest, to_ret)
 
-args = parse_arguments()
-customArgs = [{} for f in args.files]
-if not args.auto:
-    customArgs = gather_interactive_data(args.files)
-tagger = None
 
-if len(args.files) == 0:
-    print 'No files given to tag'
-    os._exit(os.EX_OK)
+def main():
+    """Main loop"""
+    from pytagger import TVTagger, MovieTagger, MusicTagger
+    args = parse_arguments()
+    custom_args = [{} for f in args.files]
+    if not args.auto:
+        custom_args = gather_interactive_data(args.files)
+    tagger = None
 
-taggers = []
-for index, file_name in enumerate(args.files):
-    if args.TV:
-        tagger = pytagger.TVTagger(file_name=file_name,
-                                   customs=customArgs[index])
-    elif args.Movie:
-        tagger = pytagger.MovieTagger(file_name)
-    elif args.Music:
-        tagger = pytagger.MusicTagger(file_name)
-    else:
-        print 'No media type flag set'
+    if len(args.files) == 0:
+        print 'No files given to tag'
         os._exit(os.EX_OK)
-    taggers.append(tagger)
-children = []
-for tagger in taggers:
-    if args.TV:
-        proc = Process(target=tagger.collect_metadata, kwargs={'trakt': True})
-        children.append(proc)
-        proc.start()
-    else:
-        proc = Process(target=tagger.collect_metadata)
-        children.append(proc)
-        proc.start()
 
-progress = 0.0
-total = 100.0
-joined = []
-while len(joined) < len(children):
-    progress += 1.02
-    for child in children:
-        if not child.is_alive():
-            child.join()
-            joined.append(child)
-            progress = float(len(joined))
+    taggers = []
+    for index, file_name in enumerate(args.files):
+        if args.TV:
+            tagger = TVTagger(file_name=file_name, customs=custom_args[index])
+        elif args.Movie:
+            tagger = MovieTagger(file_name)
+        elif args.Music:
+            tagger = MusicTagger(file_name)
+        else:
+            print 'No media type flag set'
+            os._exit(os.EX_OK)
+        taggers.append(tagger)
+
+    running = []
+    num_procs = args.num_procs
+    progress = 0.0
+    total = 100.0
+    while len(taggers) > 0:
+        while len(running) < num_procs:
+            try:
+                tagger = taggers.pop(0)
+            except IndexError:
+                break
+            p = Process(target=tagger.collect_metadata)
+            running.append(p)
+            p.start()
+            progress += 1.02
         msg = '\r{0:.2f}% Done'.format(100.0*(float(progress)/float(total)))
         sys.stdout.write(msg)
         sys.stdout.flush()
-    sleep(2)
-msg = '\r100.00% Done\n'
-sys.stdout.write(msg)
-sys.stdout.flush()
+        sleep(1)
+        running[:] = [process for process in running if process.is_alive()]
+    while len(running) > 0:
+        sleep(1)
+        running[:] = [process for process in running if process.is_alive()]
+
+    msg = '\r100.00% Done\n'
+    sys.stdout.write(msg)
+    sys.stdout.flush()
