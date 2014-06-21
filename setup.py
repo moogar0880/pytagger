@@ -1,10 +1,10 @@
 from setuptools import setup
 
-VERSION = '1.0.1'
+VERSION = '1.0.2'
 
 
 packages = ['pytagger']
-requires = ['fuzzywuzzy', 'requests', 'trakt']
+requires = ['fuzzywuzzy', 'requests', 'trakt', 'subler']
 dependency_links = ['git+http://github.com/moogar0880/python-itunes/tarball/master#egg=python-itunes-0.3']
 
 
