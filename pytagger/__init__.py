@@ -5,7 +5,7 @@ except ImportError:
     # Don't let dependencies stop us from importing on install
     pass
 
-version_info = (1, 0, 3)
+version_info = (1, 0, 4)
 
 __name__ = 'pytagger'
 __doc__ = 'A python backend to iTunes style metadata tagging'
