@@ -1,15 +1,17 @@
 from setuptools import setup
 
-VERSION = '1.0.2'
+from pytagger import __version__
 
 
 packages = ['pytagger']
 requires = ['fuzzywuzzy', 'requests', 'trakt', 'subler']
-dependency_links = ['git+http://github.com/moogar0880/python-itunes/tarball/master#egg=python-itunes-0.3']
+dependency_links = [
+    'git+https://github.com/moogar0880/python-itunes#egg=python-itunes-0.3'
+]
 
 
 setup(name='pytagger',
-      version=VERSION,
+      version=__version__,
       description='A python backend to iTunes style metadata tagging',
       author='Jonathan Nappi',
       author_email='moogar@comcast.net',
