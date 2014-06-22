@@ -29,6 +29,7 @@ class TVParser(BaseParser):
     ====================   ====================================
     (\d+)\s+(.+)           01 Pilot.m4v
     ([.\w]+)S(\d+)E(\d+)   Royal.Pains.S06E01.HDTV.x264-LOL.m4v
+    ([.\w]+).(\d+)         royal.pains.602.HDTV.x264-LOL.m4v
     ====================   ====================================
     """
     def __init__(self, *args, **kwargs):
@@ -36,7 +37,8 @@ class TVParser(BaseParser):
         super(TVParser, self).__init__(*args, **kwargs)
         pattern1 = r'(?P<episode>\d+)\s+(?P<title>.+)'
         pattern2 = r'(?P<show>[.\w]+)S(?P<season>\d+)E(?P<episode>\d+)'
-        self.patterns = pattern1, pattern2
+        pattern3 = r'(?P<show>[.\w]+)\.(?P<season_ep>\d+)'
+        self.patterns = pattern1, pattern2, pattern3
 
     def parse(self):
         """Iterate over this :class:`TVParser`'s patterns until one sticks. Once
@@ -67,16 +69,35 @@ class TVParser(BaseParser):
 
     def process_p2(self, match):
         """Process episode data out of a filename matching ([.\w]+)S(\d+)E(\d+).
-        Unlike pattern1 this process function does not assume any kid of
+        Unlike pattern1 this process function does not assume any kind of
         pre-existing directory structure for pulling in additional information.
         However, it is important to note that the episode's title will not be
         returned by this method.
 
-        :return: 4-tuple of show, season, episode, title
+        :return: 4-tuple of show, season, episode, None
         """
         show = ' '.join(match.group('show').split('.')).strip()
         season = int(match.group('season'))
         episode = int(match.group('episode'))
+        return show, season, episode, None
+
+    def process_p3(self, match):
+        """Process episode data out of a filename matching ([.\w]+).(\d+).
+        Unlike pattern1, and much like pattern2, this process function does not
+        assume any kind of pre-existing directory structure for pulling in
+        information. However, it is import to note that the episode's title will
+        not be returned by this method.
+
+        :return: 4-tuple of show, season, episode, None
+        """
+        show = ' '.join(match.group('show').split('.')).strip()
+        season_ep_data = match.group('season_ep')
+        if len(season_ep_data) == 3:
+            season = int(season_ep_data[0])
+            episode = int(season_ep_data[1:])
+        else:
+            season = int(season_ep_data[0:2])
+            episode = int(season_ep_data[2:])
         return show, season, episode, None
 
 
@@ -90,14 +111,14 @@ class MusicParser(BaseParser):
     ====================   ====================================
     """
     def __init__(self, *args, **kwargs):
-        """Grab the filepath and create TVParsing patterns"""
+        """Grab the filepath and create MusicParsing patterns"""
         super(MusicParser, self).__init__(*args, **kwargs)
         pattern1 = r'(?P<track>\d+)\s+(?P<title>.+)'
         self.patterns = pattern1,
 
     def parse(self):
-        """Iterate over this :class:`TVParser`'s patterns until one sticks. Once
-        a pattern is matched it is processed and the results from that
+        """Iterate over this :class:`MusicParser`'s patterns until one sticks.
+        Once a pattern is matched it is processed and the results from that
         processing are returned. It's important to note that if this pattern is
         matched the two containing directory names will be consumed in order to
         try and collect season and show information, effecitvely assuming an

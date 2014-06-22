@@ -248,7 +248,7 @@ class TVTagger(Tagger):
 
         extension = os.path.splitext(self.file_name)[-1].lower()
         if extension not in self.supported_types:
-            self.logger.err('Unsupported file type: {}'.format(extension))
+            self.logger.error('Unsupported file type: {}'.format(extension))
             return
         my_parser = TVParser(self.file_name)
         show, season, episode, title = my_parser.parse()
@@ -356,7 +356,7 @@ class MusicTagger(Tagger):
                 self.subler.explicitness = 'Explicit'
             self.do_tagging()
         else:
-            self.logger.err('{} not found in iTunes'.format(query))
+            self.logger.error('{} not found in iTunes'.format(query))
 
     def collect_metadata(self):
         """Checks that each file passed in is of a valid type. Providing that
@@ -366,7 +366,7 @@ class MusicTagger(Tagger):
         extension = os.path.splitext(self.file_name)[-1].lower()
         if extension not in self.supported_types:
             msg = '{} given to be tagged, but {} is not a supported file type'
-            self.logger.err(msg.format(self.file_name, extension))
+            self.logger.error(msg.format(self.file_name, extension))
             return
         my_parser = MusicParser(self.file_name)
         artist, album, track, title = my_parser.parse()
@@ -495,7 +495,7 @@ class MovieTagger(Tagger):
         extension = os.path.splitext(vid)[-1].lower()
         if extension not in self.supported_types:
             msg = '{} given to be tagged, but {} is not a supported file type'
-            self.logger.err(msg.format(vid, extension))
+            self.logger.error(msg.format(vid, extension))
             return
         self.logger.info('Tagging {}'.format(os.path.basename(vid)))
         # Title
