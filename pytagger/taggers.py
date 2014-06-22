@@ -315,7 +315,7 @@ class MusicTagger(Tagger):
     @property
     def output_file_name(self):
         """The formatted output file representation"""
-        track = self.atoms['Track #'].split('/')[0]
+        track = str(self.atoms['Track #']).split('/')[0]
         if int(track) < 10:
             track = '0{}'.format(track)
         return self._output_file.format(track=track, title=self.atoms['Name'])
