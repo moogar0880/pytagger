@@ -90,7 +90,6 @@ class Tagger(object):
         makes the call to Atomic Parsley to actually write the metadata to the
         file.
         """
-        self.atoms['iTunes Account'] = 'moogar@comcast.net'
         tmp_file_name = '.tmp{}.m4v'.format(str(os.getpid()))
         full_path = os.path.abspath(tmp_file_name).replace(' ', '\\ ')
         subler = Subler(self.file_name.replace(' ', '\\ '), dest=full_path,
@@ -114,11 +113,10 @@ class TVTagger(Tagger):
     """Tagger Subclass tailored to tagging TV Show metadata"""
     def __init__(self, file_name, customs=None, auto_tag=True):
         super(TVTagger, self).__init__()
-        trakt.api_key = '888dbf16c37694fd8633f0f7e423dfc5'
-
         self.supported_types = ['.mp4', '.m4v']
         self.file_name = file_name
         self.customs = customs or {}
+        trakt.api_key = customs.pop('trakt_key', '')
         self.media_kind = 'TV Show'
         self.atoms = AtomCollection()
         self.atoms['Comments'] = ''
@@ -302,10 +300,11 @@ class TVTagger(Tagger):
 
 class MusicTagger(Tagger):
     """Tagger Subclass tailored to tagging Music metadata"""
-    def __init__(self, file_name, auto_tag=True):
+    def __init__(self, file_name, customs=None, auto_tag=True):
         super(MusicTagger, self).__init__()
         self.supported_types = ['.m4a']
         self.file_name = file_name
+        self.customs = customs or {}
         self.media_kind = 'Music'
         self.atoms = AtomCollection()
         self.atoms['Comments'] = ''
@@ -363,6 +362,9 @@ class MusicTagger(Tagger):
         the file was of the correct type, the various searches are performed and
         all metadata is gathered.
         """
+        for key, val in self.customs.items():
+            self.atoms[key] = val
+
         extension = os.path.splitext(self.file_name)[-1].lower()
         if extension not in self.supported_types:
             msg = '{} given to be tagged, but {} is not a supported file type'
@@ -382,11 +384,12 @@ class MusicTagger(Tagger):
 
 class MovieTagger(Tagger):
     """Tagger Subclass tailored to tagging Movie metadata"""
-    def __init__(self, file_name, auto_tag=True):
+    def __init__(self, file_name, customs=None, auto_tag=True):
         super(MovieTagger, self).__init__()
         self.supported_types = ['.mp4', '.m4v']
         self.file_name = file_name
-        trakt.api_key = '888dbf16c37694fd8633f0f7e423dfc5'
+        self.customs = customs or {}
+        trakt.api_key = customs.pop('trakt_key', '')
         self.atoms = AtomCollection()
         self.atoms['Comments'] = ''
         self.atoms['Disk #'] = '1/1'
@@ -491,6 +494,9 @@ class MovieTagger(Tagger):
         the file was of the correct type, the various searches are performed and
         all metadata is gathered.
         """
+        for key, val in self.customs.items():
+            self.atoms[key] = val
+
         vid = self.file_name
         extension = os.path.splitext(vid)[-1].lower()
         if extension not in self.supported_types:
