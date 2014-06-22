@@ -1,3 +1,5 @@
+import os
+import subprocess
 from setuptools import setup
 
 from pytagger import __version__
@@ -5,10 +7,14 @@ from pytagger import __version__
 
 packages = ['pytagger']
 requires = ['fuzzywuzzy', 'requests', 'trakt', 'subler']
-dependency_links = [
-    'git+https://github.com/moogar0880/python-itunes#egg=python-itunes-0.3'
-]
 
+itunes = 'git+https://github.com/moogar0880/python-itunes#egg=python-itunes-1.1'
+
+install_cmd = 'pip install %s'
+if os.getuid() == 0:
+    install_cmd = 'sudo pip install %s'
+
+subprocess.check_call(install_cmd % itunes, shell=True)
 
 setup(name='pytagger',
       version=__version__,
@@ -20,7 +26,6 @@ setup(name='pytagger',
       license='http://www.gnu.org/copyleft/gpl.html',
       platforms=['OS X'],
       url='https://github.com/moogar0880/pytagger',
-      dependency_links=dependency_links,
       packages=packages,
       install_requires=requires,
       entry_points={
