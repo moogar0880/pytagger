@@ -1,6 +1,7 @@
 #!/usr/bin/python
 import os
 import sys
+import json
 import argparse
 
 from time import sleep
@@ -10,17 +11,19 @@ from multiprocessing import Process, cpu_count
 def parse_arguments():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser()
-    parser.add_argument('-a', '--auto', action="store_true", 
+    parser.add_argument('-a', '--auto', action='store_true',
                         help='enable automatic tagging')
-    parser.add_argument('-t', '--TV', action="store_true", 
+    parser.add_argument('-t', '--TV', action='store_true',
                         help='declare media type as TV')
-    parser.add_argument('-m', '--Movie', action="store_true", 
+    parser.add_argument('-m', '--Movie', action='store_true',
                         help='declare media type as Movie')
-    parser.add_argument('-M', '--Music', action="store_true", 
+    parser.add_argument('-M', '--Music', action='store_true',
                         help='declare media type as Music')
     parser.add_argument('-n', '--num_procs', action='store',
                         default=cpu_count() * 2,
                         help='Set the number of files to tag simultaneously')
+    parser.add_argument('-e', '--edit', action='store_true',
+                        help='Interactively edit your config file')
     parser.add_argument('files', nargs='*')
     return parser.parse_args()
 
@@ -30,7 +33,7 @@ def map_readable_to_real(target):
     target value key that the user is allowed to enter for their metadata
     fields.
     """
-    translator = {'HD': 'hdvideo'}
+    translator = {'HD': 'HD Video'}
     try:
         return translator[target]
     except Exception:
@@ -95,27 +98,92 @@ def gather_interactive_data(file_list):
     return file_poll(quest, to_ret)
 
 
+def first_use():
+    """To be run only if the pytagger config file does not exist which,
+    assumingly will only happen the first time the script is run in order to
+    store user specific information in a cerntrally available location
+    """
+    user = os.path.expanduser('~').split(os.sep)[-1]
+    question = "Well hey there, %s. It looks like this is your first time " \
+               "running PyTagger, so let's go ahead and get some basic info " \
+               "from you real quick to make your metadata tagging even " \
+               "easier.\n\nFirst, please enter your Apple ID: " % user
+    apple_id = raw_input(question).decode()
+    question_2 = "\nNow please enter your Trakt.tv API Key which can be " \
+                 "found at http://trakt.tv/api-docs/authentication: "
+    api_key = raw_input(question_2).decode()
+    config_file = os.sep.join([os.path.expanduser('~'), '.pytagger.json'])
+    config_data = {'iTunes Account': apple_id, 'trakt_key': api_key}
+    with open(config_file, 'w') as f:
+        json.dump(config_data, f)
+
+
+def edit_configs():
+    """Similar to first_use but focused on editing the pre-existing info stored
+    in pytagger.json
+    """
+    config_file = os.sep.join([os.path.expanduser('~'), '.pytagger.json'])
+    if not os.path.exists(config_file):
+        return first_use()
+    with open(config_file) as f:
+        config_data = json.load(f)
+    user = os.path.expanduser('~').split(os.sep)[-1]
+    question = "Hey, %s. To edit a particular field just provide a new value" \
+               "when prompted, to leave a value alone just press enter." \
+               "from you real quick to make your metadata tagging even " \
+               "easier.\n\nFirst, please enter your Apple ID [%s]: "
+    apple_id = raw_input(question % (user, config_data.get('iTunes Account',
+                                                           ''))).decode()
+    question_2 = "\nNow please enter your Trakt.tv API Key which can be " \
+                 "found at http://trakt.tv/api-docs/authentication [%s]: "
+    api_key = raw_input(question_2 % config_data.get('trakt_key', '')).decode()
+    config_file = os.sep.join([os.path.expanduser('~'), '.pytagger.json'])
+    config_data = {'iTunes Account': apple_id, 'trakt_key': api_key}
+    with open(config_file, 'w') as f:
+        json.dump(config_data, f)
+
+
+def load_configs():
+    """Read in the information stored in the current users pytagger config file
+    and return it as a dict
+    """
+    config_file = os.sep.join([os.path.expanduser('~'), '.pytagger.json'])
+    if not os.path.exists(config_file):
+        first_use()
+    with open(config_file) as f:
+        config_data = json.load(f)
+    return config_data
+
+
 def main():
     """Main loop"""
     from pytagger import TVTagger, MovieTagger, MusicTagger
     args = parse_arguments()
     custom_args = [{} for f in args.files]
-    if not args.auto:
-        custom_args = gather_interactive_data(args.files)
-    tagger = None
+
+    if args.edit:
+        edit_configs()
+    config_args = load_configs()
 
     if len(args.files) == 0:
         print 'No files given to tag'
         os._exit(os.EX_OK)
 
+    if not args.auto:
+        custom_args = gather_interactive_data(args.files)
+    tagger = None
+
     taggers = []
     for index, file_name in enumerate(args.files):
+        user_args = config_args
+        for key, val in custom_args[index]:
+            user_args[key] = val
         if args.TV:
-            tagger = TVTagger(file_name=file_name, customs=custom_args[index])
+            tagger = TVTagger(file_name, customs=user_args)
         elif args.Movie:
-            tagger = MovieTagger(file_name)
+            tagger = MovieTagger(file_name, customs=user_args)
         elif args.Music:
-            tagger = MusicTagger(file_name)
+            tagger = MusicTagger(file_name, customs=user_args)
         else:
             print 'No media type flag set'
             os._exit(os.EX_OK)
@@ -141,6 +209,10 @@ def main():
         sleep(1)
         running[:] = [process for process in running if process.is_alive()]
     while len(running) > 0:
+        progress += 1.02
+        msg = '\r{0:.2f}% Done'.format(100.0*(float(progress)/float(total)))
+        sys.stdout.write(msg)
+        sys.stdout.flush()
         sleep(1)
         running[:] = [process for process in running if process.is_alive()]
 
