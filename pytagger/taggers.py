@@ -5,7 +5,6 @@ import string
 import logging
 import subprocess
 
-from pprint import pformat
 from datetime import date
 
 import trakt
@@ -96,7 +95,11 @@ class Tagger(object):
                         media_kind=self.media_kind, metadata=self.atoms.atoms)
 
         self.logger.info('Beginning Metadata tagging...')
-        subler.tag()
+        try:
+            subler.tag()
+        except subprocess.CalledProcessError as ex:
+            if ex.returncode != 255:
+                raise ex
         self.logger.info('Metadata tagging complete. moving updated file')
 
         for tag, value in self.atoms.items():
@@ -205,9 +208,7 @@ class TVTagger(Tagger):
         msg = '{} : {} : {}'.format(show_name, season_num, episode_num)
         self.logger.warning(msg)
         show = TVShow(show_name)
-        self.logger.warning(pformat(show.search_season(season_num).__dict__))
         episode = show.search_season(season_num).episodes[episode_num]
-        self.logger.warning(pformat(episode.__dict__))
 
         self.atoms['Rating'] = show.certification
         self.atoms['Genre'] = show.genres[0].name
