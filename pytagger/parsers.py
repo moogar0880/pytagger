@@ -36,7 +36,7 @@ class TVParser(BaseParser):
         """Grab the filepath and create TVParsing patterns"""
         super(TVParser, self).__init__(*args, **kwargs)
         pattern1 = r'(?P<episode>\d+)\s+(?P<title>.+)'
-        pattern2 = r'(?P<show>[.\w]+)S(?P<season>\d+)E(?P<episode>\d+)'
+        pattern2 = r'(?P<show>[.\w]+)[S|s](?P<season>\d+)[E|e](?P<episode>\d+)'
         pattern3 = r'(?P<show>[.\w]+)\.(?P<season_ep>\d+)'
         self.patterns = pattern1, pattern2, pattern3
 
