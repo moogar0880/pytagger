@@ -199,7 +199,7 @@ def main():
                 tagger = taggers.pop(0)
             except IndexError:
                 break
-            p = Process(target=tagger.collect_metadata)
+            p = Process(target=tagger.collect_metadata, name=tagger.file_name)
             running.append(p)
             p.start()
             progress += 1.02
