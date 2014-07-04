@@ -106,9 +106,9 @@ class Tagger(object):
             if tag == 'Artwork' and os.path.exists(value):
                 subprocess.check_call('rm {}'.format(value), shell=True)
         move_to_trash(self.file_name)
-        file_name = os.path.basename(self.file_name)
+        file_name = unicode(os.path.basename(self.file_name))
         dest_path = self.file_name.replace(file_name, self.output_file_name)
-        command = 'mv {} "{}"'.format(full_path, dest_path)
+        command = u'mv {} "{}"'.format(full_path, dest_path)
         subprocess.check_call(command, shell=True)
 
 
@@ -119,14 +119,14 @@ class TVTagger(Tagger):
         self.supported_types = ['.mp4', '.m4v']
         self.file_name = file_name
         self.customs = customs or {}
-        trakt.api_key = customs.pop('trakt_key', '')
+        trakt.api_key = customs.get('trakt_key', '')
         self.media_kind = 'TV Show'
         self.atoms = AtomCollection()
         self.atoms['Comments'] = ''
         self.atoms['Disk #'] = '1/1'
         self.subler = Subler(self.file_name, optimize=False,
                              media_kind=self.media_kind)
-        self._output_file = '{episode} {title}.m4v'
+        self._output_file = u'{episode} {title}.m4v'
 
     @property
     def output_file_name(self):
@@ -143,7 +143,7 @@ class TVTagger(Tagger):
         """
         parameters = {}
         search = queries['season']
-        self.logger.info('Searching iTunes for {}'.format(search))
+        self.logger.info(u'Searching iTunes for {}'.format(search))
         # Gather Season information
         season_results = itunes.search_season(search)
         season_data = None
@@ -166,17 +166,17 @@ class TVTagger(Tagger):
                     art = os.path.abspath('.albumart{}.jpg'.format(pid))
                     parameters['Artwork'] = art.replace(' ', '\\ ')
             if season_data is None:
-                self.logger.debug('{} not found in iTunes'.format(search))
+                self.logger.debug(u'{} not found in iTunes'.format(search))
 
         #Gather episode information
         search = queries['episode']
-        self.logger.info('Searching iTunes for {}'.format(search))
+        self.logger.info(u'Searching iTunes for {}'.format(search))
         episode_results = itunes.search_episode(search)
         episode_data = None
         if episode_results:
             episode_data = episode_results[0]
         else:
-            self.logger.debug('{} not found in iTunes'.format(search))
+            self.logger.debug(u'{} not found in iTunes'.format(search))
         with ignored(AttributeError):
             # Genre
             parameters['Genre'] = episode_data.get_genre()
@@ -205,7 +205,7 @@ class TVTagger(Tagger):
             episode_num = int(self.atoms['TV Episode #']) - 1
         else:
             episode_num = int(self.atoms['TV Episode #'])
-        msg = '{} : {} : {}'.format(show_name, season_num, episode_num)
+        msg = u'{} : {} : {}'.format(show_name, season_num, episode_num)
         self.logger.warning(msg)
         show = TVShow(show_name)
         episode = show.search_season(season_num).episodes[episode_num]
@@ -247,7 +247,7 @@ class TVTagger(Tagger):
 
         extension = os.path.splitext(self.file_name)[-1].lower()
         if extension not in self.supported_types:
-            self.logger.error('Unsupported file type: {}'.format(extension))
+            self.logger.error(u'Unsupported file type: {}'.format(extension))
             return
         my_parser = TVParser(self.file_name)
         show, season, episode, title = my_parser.parse()
@@ -267,14 +267,14 @@ class TVTagger(Tagger):
         self.atoms['TV Episode ID'] = ep_id
         # Format album name
         artist = self.atoms.get('Artist', '')
-        album_title = '{}, Season {}'.format(artist, season)
+        album_title = u'{}, Season {}'.format(artist, season)
         self.atoms['Album'] = album_title
 
         self.do_trakt_search()
         # Build queries for iTunes search
         tmp = dict()
-        tmp['season'] = '{} {}'.format(artist, season)
-        query_title = self.atoms['Name'].lower()
+        tmp['season'] = u'{} {}'.format(artist, season)
+        query_title = unicode(self.atoms['Name']).lower()
         query_title = string.replace(query_title, '-', ' ').strip()
         if 'part ' in query_title:
             query_title = string.replace(query_title, 'part ', 'pt ')
@@ -290,7 +290,7 @@ class TVTagger(Tagger):
             query_title = string.replace(query_title, 'fucker', 'f*****')
         if 'fuck' in query_title:
             query_title = string.replace(query_title, 'fuck', 'f***')
-        tmp['episode'] = '{} {}'.format(os.path.basename(show), query_title)
+        tmp['episode'] = u'{} {}'.format(os.path.basename(show), query_title)
         # Concatenate parameters with iTunes query results
         for key, val in self.do_itunes_search(tmp).items():
             self.atoms[key] = val
@@ -311,7 +311,7 @@ class MusicTagger(Tagger):
         self.atoms['Comments'] = ''
         self.atoms['Disk #'] = '1/1'
         self.subler = Subler(self.file_name, media_kind=self.media_kind)
-        self._output_file = '{track} {title}.m4a'
+        self._output_file = u'{track} {title}.m4a'
 
     @property
     def output_file_name(self):
@@ -356,7 +356,7 @@ class MusicTagger(Tagger):
                 self.subler.explicitness = 'Explicit'
             self.do_tagging()
         else:
-            self.logger.error('{} not found in iTunes'.format(query))
+            self.logger.error(u'{} not found in iTunes'.format(query))
 
     def collect_metadata(self):
         """Checks that each file passed in is of a valid type. Providing that
@@ -378,7 +378,7 @@ class MusicTagger(Tagger):
         self.atoms['Album'] = album
         self.atoms['Track #'] = track
         self.atoms['Name'] = title
-        query = '{} {}'.format(artist, title)
+        query = u'{} {}'.format(artist, title)
         self.do_itunes_search(query)
         self.do_tagging()
 
@@ -390,12 +390,12 @@ class MovieTagger(Tagger):
         self.supported_types = ['.mp4', '.m4v']
         self.file_name = file_name
         self.customs = customs or {}
-        trakt.api_key = customs.pop('trakt_key', '')
+        trakt.api_key = customs.get('trakt_key', '')
         self.atoms = AtomCollection()
         self.atoms['Comments'] = ''
         self.atoms['Disk #'] = '1/1'
         self.subler = Subler(self.file_name, media_kind=self.media_kind)
-        self._output_file = '{title}.m4v'
+        self._output_file = u'{title}.m4v'
 
     @property
     def output_file_name(self):
@@ -504,7 +504,7 @@ class MovieTagger(Tagger):
             msg = '{} given to be tagged, but {} is not a supported file type'
             self.logger.error(msg.format(vid, extension))
             return
-        self.logger.info('Tagging {}'.format(os.path.basename(vid)))
+        self.logger.info(u'Tagging {}'.format(os.path.basename(vid)))
         # Title
         self.atoms['Name'] = os.path.basename(vid).replace('\\',
                                                            '').strip()[:-4]
