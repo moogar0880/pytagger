@@ -208,7 +208,7 @@ class TVTagger(Tagger):
         msg = u'{} : {} : {}'.format(show_name, season_num, episode_num)
         self.logger.warning(msg)
         show = TVShow(show_name)
-        episode = show.search_season(season_num).episodes[episode_num]
+        episode = show.seasons[season_num].episodes[episode_num]
 
         self.atoms['Rating'] = show.certification
         self.atoms['Genre'] = show.genres[0].name
