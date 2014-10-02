@@ -12,6 +12,8 @@ import itunes
 import requests
 
 from subler import Subler
+from subler.tools import AtomCollection
+
 from trakt.tv import TVShow
 from trakt.movies import Movie
 
