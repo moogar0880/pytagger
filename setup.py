@@ -6,7 +6,7 @@ from pytagger import __version__
 
 
 packages = ['pytagger']
-requires = ['fuzzywuzzy', 'requests', 'trakt', 'subler']
+requires = ['fuzzywuzzy', 'requests', 'trakt', 'subler', 'pillow']
 
 itunes = 'git+https://github.com/moogar0880/python-itunes#egg=python-itunes-1.1'
 
