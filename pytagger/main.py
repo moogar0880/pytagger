@@ -7,7 +7,7 @@ import json
 import argparse
 
 from time import sleep
-from multiprocessing import Process, cpu_count
+from multiprocessing import Process, cpu_count, Value
 
 
 def parse_arguments():
@@ -160,44 +160,47 @@ def load_configs():
 def main():
     """Main loop"""
     from pytagger import TVTagger, MovieTagger, MusicTagger
-    from pytagger.utils import initialize_logging
+    from pytagger.utils import initialize_logging, print_progress
 
     global_logger = initialize_logging()
 
+    progress_meter = Value('d', 0.0)
+
     args = parse_arguments()
+
+    if not any([args.TV, args.Movie, args.Music]):
+        print('No media type flag set')
+        sys.exit(1)
+    if len(args.files) == 0:
+        print('No files given to tag')
+        sys.exit(2)
+
     custom_args = [{} for _ in args.files]
 
     if args.edit:
         edit_configs()
     config_args = load_configs()
 
-    if len(args.files) == 0:
-        print('No files given to tag')
-        sys.exit(os.EX_OK)
-
     if not args.auto:
         custom_args = gather_interactive_data(args.files)
+
+    tagger_type = TVTagger if args.TV else MovieTagger
+    if args.Music:
+        tagger_type = MusicTagger
 
     taggers = []
     for index, file_name in enumerate(args.files):
         user_args = config_args
         for key, val in custom_args[index]:
             user_args[key] = val
-        if args.TV:
-            tagger = TVTagger(file_name, global_logger, customs=user_args)
-        elif args.Movie:
-            tagger = MovieTagger(file_name, global_logger, customs=user_args)
-        elif args.Music:
-            tagger = MusicTagger(file_name, global_logger, customs=user_args)
-        else:
-            print('No media type flag set')
-            sys.exit(os.EX_OK)
+        tagger = tagger_type(file_name, global_logger, progress_meter,
+                             customs=user_args)
         taggers.append(tagger)
+
+    max_steps = float(len(taggers) * tagger_type.steps)
 
     running = []
     num_procs = args.num_procs
-    progress = 0.0
-    total = 100.0
     while len(taggers) > 0:
         while len(running) < num_procs:
             try:
@@ -207,20 +210,10 @@ def main():
             p = Process(target=tagger.collect_metadata, name=tagger.file_name)
             running.append(p)
             p.start()
-            progress += 1.02
-        msg = '\r{0:.2f}% Done'.format(100.0*(float(progress)/float(total)))
-        sys.stdout.write(msg)
-        sys.stdout.flush()
+        print_progress(progress_meter, max_steps)
         sleep(1)
         running[:] = [process for process in running if process.is_alive()]
     while len(running) > 0:
-        progress += 1.02
-        msg = '\r{0:.2f}% Done'.format(100.0*(float(progress)/float(total)))
-        sys.stdout.write(msg)
-        sys.stdout.flush()
+        print_progress(progress_meter, max_steps)
         sleep(1)
         running[:] = [process for process in running if process.is_alive()]
-
-    msg = '\r100.00% Done\n'
-    sys.stdout.write(msg)
-    sys.stdout.flush()
