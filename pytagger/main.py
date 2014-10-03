@@ -1,4 +1,6 @@
 #!/usr/bin/python
+from __future__ import print_function
+
 import os
 import sys
 import json
@@ -56,22 +58,22 @@ def file_poll(question, to_ret):
                     'target (h for list of targets): '
             target = raw_input(quest)
             if target == 'h':
-                print 'The list will print when it\'s been written'
+                print('The list will print when it\'s been written')
             else:
                 split = target.split('=')
                 target = split[0]
                 target_value = split[1]
-                print target, target_value, to_ret
+                print(target, target_value, to_ret)
                 for to in to_ret:
                     to[map_readable_to_real(target)] = target_value
-                    print to[map_readable_to_real(target)]
+                    print(to[map_readable_to_real(target)])
         else:
             index = int(choice)-1
             quest = 'Please enter your metadata and it\'s corresponding ' \
                     'target (h for list of targets): '
             target = raw_input(quest)
             if target == 'h':
-                print 'The list will print when it\'s been written'
+                print('The list will print when it\'s been written')
             else:
                 split = target.split('=')
                 target = split[0].strip()
@@ -92,7 +94,7 @@ def gather_interactive_data(file_list):
     for i, name in enumerate(names):
         quest += '\t{}: {}\n'.format(i+1, name)
         to_ret.append({})
-        print to_ret
+        print(to_ret)
     quest += 'Choose the file you would like to set metadata for, a for ' \
              'all, e to finish, q to quit: '
     return file_poll(quest, to_ret)
@@ -158,6 +160,10 @@ def load_configs():
 def main():
     """Main loop"""
     from pytagger import TVTagger, MovieTagger, MusicTagger
+    from pytagger.utils import initialize_logging
+
+    global_logger = initialize_logging()
+
     args = parse_arguments()
     custom_args = [{} for f in args.files]
 
@@ -166,8 +172,8 @@ def main():
     config_args = load_configs()
 
     if len(args.files) == 0:
-        print 'No files given to tag'
-        os._exit(os.EX_OK)
+        print('No files given to tag')
+        sys.exit(os.EX_OK)
 
     if not args.auto:
         custom_args = gather_interactive_data(args.files)
@@ -179,14 +185,14 @@ def main():
         for key, val in custom_args[index]:
             user_args[key] = val
         if args.TV:
-            tagger = TVTagger(file_name, customs=user_args)
+            tagger = TVTagger(file_name, global_logger, customs=user_args)
         elif args.Movie:
-            tagger = MovieTagger(file_name, customs=user_args)
+            tagger = MovieTagger(file_name, global_logger, customs=user_args)
         elif args.Music:
-            tagger = MusicTagger(file_name, customs=user_args)
+            tagger = MusicTagger(file_name, global_logger, customs=user_args)
         else:
-            print 'No media type flag set'
-            os._exit(os.EX_OK)
+            print('No media type flag set')
+            sys.exit(os.EX_OK)
         taggers.append(tagger)
 
     running = []
