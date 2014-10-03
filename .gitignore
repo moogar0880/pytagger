@@ -2,5 +2,3 @@
 .DS_Store
 *.pyc
 .idea
-.idea/*
-.idea/*.xml
