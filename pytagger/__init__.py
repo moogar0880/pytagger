@@ -8,7 +8,7 @@ except ImportError as ex:
         raise ex
     pass
 
-version_info = (1, 1, 0)
+version_info = (1, 1, 2)
 
 __name__ = 'pytagger'
 __doc__ = 'A python backend to iTunes style metadata tagging'
