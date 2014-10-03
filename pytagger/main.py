@@ -38,7 +38,7 @@ def map_readable_to_real(target):
     translator = {'HD': 'HD Video'}
     try:
         return translator[target]
-    except Exception:
+    except KeyError:
         return target
 
 
@@ -165,7 +165,7 @@ def main():
     global_logger = initialize_logging()
 
     args = parse_arguments()
-    custom_args = [{} for f in args.files]
+    custom_args = [{} for _ in args.files]
 
     if args.edit:
         edit_configs()
@@ -177,7 +177,6 @@ def main():
 
     if not args.auto:
         custom_args = gather_interactive_data(args.files)
-    tagger = None
 
     taggers = []
     for index, file_name in enumerate(args.files):
