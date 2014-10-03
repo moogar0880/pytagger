@@ -136,24 +136,3 @@ class MusicParser(BaseParser):
                 track, title = match.group('track'), match.group('title')
                 album = album.split(os.sep)[-1]
                 return artist, album, int(track), title[:-4]
-
-
-def test_tv():
-    root_path = '/Users/Jon'
-    file_1 = os.sep.join([root_path, 'Royal Pains/Season 1/01 Pilot.m4v'])
-    file_2 = os.sep.join([root_path, 'Royal.Pains.S06E01.HDTV.x264-LOL.m4v'])
-
-    print TVParser(file_1).parse()
-    print TVParser(file_2).parse()
-
-
-def test_music():
-    root_path = '/Users/Jon'
-    file_1 = os.sep.join([root_path, 'Staind/The Grey/01 Mudshovel.mp3'])
-
-    print MusicParser(file_1).parse()
-
-
-if __name__ == '__main__':
-    # test_tv()
-    test_music()
