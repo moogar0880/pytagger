@@ -87,7 +87,7 @@ class Tagger(object):
         self._update_progress()
         tmp_file_name = '.tmp{}.m4v'.format(str(os.getpid()))
         full_path = os.path.abspath(tmp_file_name).replace(' ', '\\ ')
-        subler = Subler(self.file_name.replace(' ', '\\ '), dest=full_path,
+        subler = Subler(self.file_name.replace, dest=full_path,
                         media_kind=self.media_kind, metadata=self.atoms.atoms)
 
         if 'Artwork' not in self.atoms:
