@@ -1,8 +1,11 @@
+import sys
 try:
     from .utils import *
     from .taggers import *
-except ImportError:
+except ImportError as ex:
     # Don't let dependencies stop us from importing on install
+    if 'install' not in sys.argv:
+        raise ex
     pass
 
 version_info = (1, 1, 0)

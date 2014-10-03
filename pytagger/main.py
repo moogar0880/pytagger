@@ -1,11 +1,13 @@
 #!/usr/bin/python
+from __future__ import print_function
+
 import os
 import sys
 import json
 import argparse
 
 from time import sleep
-from multiprocessing import Process, cpu_count
+from multiprocessing import Process, cpu_count, Value
 
 
 def parse_arguments():
@@ -36,7 +38,7 @@ def map_readable_to_real(target):
     translator = {'HD': 'HD Video'}
     try:
         return translator[target]
-    except Exception:
+    except KeyError:
         return target
 
 
@@ -56,22 +58,22 @@ def file_poll(question, to_ret):
                     'target (h for list of targets): '
             target = raw_input(quest)
             if target == 'h':
-                print 'The list will print when it\'s been written'
+                print('The list will print when it\'s been written')
             else:
                 split = target.split('=')
                 target = split[0]
                 target_value = split[1]
-                print target, target_value, to_ret
+                print(target, target_value, to_ret)
                 for to in to_ret:
                     to[map_readable_to_real(target)] = target_value
-                    print to[map_readable_to_real(target)]
+                    print(to[map_readable_to_real(target)])
         else:
             index = int(choice)-1
             quest = 'Please enter your metadata and it\'s corresponding ' \
                     'target (h for list of targets): '
             target = raw_input(quest)
             if target == 'h':
-                print 'The list will print when it\'s been written'
+                print('The list will print when it\'s been written')
             else:
                 split = target.split('=')
                 target = split[0].strip()
@@ -92,7 +94,7 @@ def gather_interactive_data(file_list):
     for i, name in enumerate(names):
         quest += '\t{}: {}\n'.format(i+1, name)
         to_ret.append({})
-        print to_ret
+        print(to_ret)
     quest += 'Choose the file you would like to set metadata for, a for ' \
              'all, e to finish, q to quit: '
     return file_poll(quest, to_ret)
@@ -158,41 +160,47 @@ def load_configs():
 def main():
     """Main loop"""
     from pytagger import TVTagger, MovieTagger, MusicTagger
+    from pytagger.utils import initialize_logging, print_progress
+
+    global_logger = initialize_logging()
+
+    progress_meter = Value('d', 0.0)
+
     args = parse_arguments()
-    custom_args = [{} for f in args.files]
+
+    if not any([args.TV, args.Movie, args.Music]):
+        print('No media type flag set')
+        sys.exit(1)
+    if len(args.files) == 0:
+        print('No files given to tag')
+        sys.exit(2)
+
+    custom_args = [{} for _ in args.files]
 
     if args.edit:
         edit_configs()
     config_args = load_configs()
 
-    if len(args.files) == 0:
-        print 'No files given to tag'
-        os._exit(os.EX_OK)
-
     if not args.auto:
         custom_args = gather_interactive_data(args.files)
-    tagger = None
+
+    tagger_type = TVTagger if args.TV else MovieTagger
+    if args.Music:
+        tagger_type = MusicTagger
 
     taggers = []
     for index, file_name in enumerate(args.files):
         user_args = config_args
         for key, val in custom_args[index]:
             user_args[key] = val
-        if args.TV:
-            tagger = TVTagger(file_name, customs=user_args)
-        elif args.Movie:
-            tagger = MovieTagger(file_name, customs=user_args)
-        elif args.Music:
-            tagger = MusicTagger(file_name, customs=user_args)
-        else:
-            print 'No media type flag set'
-            os._exit(os.EX_OK)
+        tagger = tagger_type(file_name, global_logger, progress_meter,
+                             customs=user_args)
         taggers.append(tagger)
+
+    max_steps = float(len(taggers) * (tagger_type.steps + 1))
 
     running = []
     num_procs = args.num_procs
-    progress = 0.0
-    total = 100.0
     while len(taggers) > 0:
         while len(running) < num_procs:
             try:
@@ -202,20 +210,11 @@ def main():
             p = Process(target=tagger.collect_metadata, name=tagger.file_name)
             running.append(p)
             p.start()
-            progress += 1.02
-        msg = '\r{0:.2f}% Done'.format(100.0*(float(progress)/float(total)))
-        sys.stdout.write(msg)
-        sys.stdout.flush()
+        print_progress(progress_meter, max_steps)
         sleep(1)
         running[:] = [process for process in running if process.is_alive()]
     while len(running) > 0:
-        progress += 1.02
-        msg = '\r{0:.2f}% Done'.format(100.0*(float(progress)/float(total)))
-        sys.stdout.write(msg)
-        sys.stdout.flush()
+        print_progress(progress_meter, max_steps)
         sleep(1)
         running[:] = [process for process in running if process.is_alive()]
-
-    msg = '\r100.00% Done\n'
-    sys.stdout.write(msg)
-    sys.stdout.flush()
+    print('\n')
