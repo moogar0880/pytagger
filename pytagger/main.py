@@ -197,7 +197,7 @@ def main():
                              customs=user_args)
         taggers.append(tagger)
 
-    max_steps = float(len(taggers) * tagger_type.steps)
+    max_steps = float(len(taggers) * (tagger_type.steps + 1))
 
     running = []
     num_procs = args.num_procs
@@ -217,3 +217,4 @@ def main():
         print_progress(progress_meter, max_steps)
         sleep(1)
         running[:] = [process for process in running if process.is_alive()]
+    print('\n')
