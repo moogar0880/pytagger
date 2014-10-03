@@ -172,3 +172,16 @@ def initialize_logging():
     logger = logging.getLogger('pytager')
     logger.addHandler(MultiProcessingLogger)
     return logger
+
+
+def print_progress(meter, total_steps):
+    """Print the current progress, as depicted by the progress_meter, to stdout
+
+    :param meter: The multiprocess Value instance containing our progress data
+    :param total_steps: The total number of steps we can possibly hit
+    """
+    msg = '\r{0:.2f}% Done'
+
+    with meter.get_lock():
+        sys.stdout.write(msg.format(100.0*(meter.value/total_steps)))
+        sys.stdout.flush()
