@@ -1,11 +1,9 @@
 """A collection of metadata Taggers for a variety of media types"""
 import os
 import re
+import shutil
 import string
-import logging
 import subprocess
-
-from datetime import date
 
 import trakt
 import itunes
@@ -17,7 +15,8 @@ from subler.tools import AtomCollection
 from trakt.tv import TVShow
 from trakt.movies import Movie
 
-from .utils import *
+from .utils import ignored, move_to_trash, strip_unicode
+from .artwork import generate_artwork
 from .parsers import *
 
 __author__ = 'Jon Nappi'
@@ -44,18 +43,9 @@ MOVIE_GENREIDS = {'Action & Adventure': 4401, 'Anime': 4402, 'Classics': 4403,
 
 class Tagger(object):
     """Generic Tagger Class"""
-    def __init__(self):
+    def __init__(self, logger):
         super(Tagger, self).__init__()
-        log_date = date.today().isoformat()
-        home = os.path.expanduser('~')
-        name = os.path.join(home, '.pytagger_logs/{}{}.log'.format(__name__,
-                                                                   log_date))
-        if not os.path.exists(os.path.join(home, '.pytagger_logs')):
-            os.mkdir(os.path.join(home, '.pytagger_logs'))
-        logging.basicConfig(filename=name, level=logging.CRITICAL,
-                            format='%(asctime)s %(levelname)s:%(message)s',
-                            datefmt='%m/%d/%Y %I:%M:%S %p')
-        self.logger = logging.getLogger(__name__)
+        self.logger = logger
         self.file_name = None
         self.output_file = self.file_name
         self.atoms = AtomCollection()
@@ -96,6 +86,10 @@ class Tagger(object):
         subler = Subler(self.file_name.replace(' ', '\\ '), dest=full_path,
                         media_kind=self.media_kind, metadata=self.atoms.atoms)
 
+        if 'Artwork' not in self.atoms:
+            self.atoms['Artwork'] = generate_artwork(self.atoms['Artist'],
+                                                     self.atoms['Album'])
+
         self.logger.info('Beginning Metadata tagging...')
         try:
             subler.tag()
@@ -106,18 +100,17 @@ class Tagger(object):
 
         for tag, value in self.atoms.items():
             if tag == 'Artwork' and os.path.exists(value):
-                subprocess.check_call('rm {}'.format(value), shell=True)
+                os.remove(value)
         move_to_trash(self.file_name)
         file_name = unicode(os.path.basename(self.file_name))
         dest_path = self.file_name.replace(file_name, self.output_file_name)
-        command = u'mv {} "{}"'.format(full_path, dest_path)
-        subprocess.check_call(command, shell=True)
+        shutil.move(full_path, dest_path)
 
 
 class TVTagger(Tagger):
     """Tagger Subclass tailored to tagging TV Show metadata"""
-    def __init__(self, file_name, customs=None, auto_tag=True):
-        super(TVTagger, self).__init__()
+    def __init__(self, file_name, logger, customs=None):
+        super(TVTagger, self).__init__(logger)
         self.supported_types = ['.mp4', '.m4v']
         self.file_name = file_name
         self.customs = customs or {}
@@ -219,7 +212,8 @@ class TVTagger(Tagger):
         for actor in show.people:
             if hasattr(actor, 'name'):
                 actors.append(actor.name)
-        self.atoms['Cast'] = ', '.join([actor for actor in actors if actor is not None])
+        self.atoms['Cast'] = ', '.join([actor for actor in actors if
+                                        actor is not None])
         self.atoms['Release Date'] = episode.first_aired_iso
         if len(episode.overview) > 250:
             self.atoms['Description'] = episode.overview[:250]
@@ -303,8 +297,8 @@ class TVTagger(Tagger):
 
 class MusicTagger(Tagger):
     """Tagger Subclass tailored to tagging Music metadata"""
-    def __init__(self, file_name, customs=None, auto_tag=True):
-        super(MusicTagger, self).__init__()
+    def __init__(self, file_name, logger, customs=None):
+        super(MusicTagger, self).__init__(logger)
         self.supported_types = ['.m4a']
         self.file_name = file_name
         self.customs = customs or {}
@@ -387,8 +381,8 @@ class MusicTagger(Tagger):
 
 class MovieTagger(Tagger):
     """Tagger Subclass tailored to tagging Movie metadata"""
-    def __init__(self, file_name, customs=None, auto_tag=True):
-        super(MovieTagger, self).__init__()
+    def __init__(self, file_name, logger, customs=None):
+        super(MovieTagger, self).__init__(logger)
         self.supported_types = ['.mp4', '.m4v']
         self.file_name = file_name
         self.customs = customs or {}
