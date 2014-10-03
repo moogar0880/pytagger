@@ -43,9 +43,12 @@ MOVIE_GENREIDS = {'Action & Adventure': 4401, 'Anime': 4402, 'Classics': 4403,
 
 class Tagger(object):
     """Generic Tagger Class"""
-    def __init__(self, logger):
+    steps = 2
+
+    def __init__(self, logger, progress_meter):
         super(Tagger, self).__init__()
         self.logger = logger
+        self.progress_meter = progress_meter
         self.file_name = None
         self.output_file = self.file_name
         self.atoms = AtomCollection()
@@ -81,6 +84,7 @@ class Tagger(object):
         makes the call to Atomic Parsley to actually write the metadata to the
         file.
         """
+        self._update_progress()
         tmp_file_name = '.tmp{}.m4v'.format(str(os.getpid()))
         full_path = os.path.abspath(tmp_file_name).replace(' ', '\\ ')
         subler = Subler(self.file_name.replace(' ', '\\ '), dest=full_path,
@@ -105,12 +109,22 @@ class Tagger(object):
         file_name = unicode(os.path.basename(self.file_name))
         dest_path = self.file_name.replace(file_name, self.output_file_name)
         shutil.move(full_path, dest_path)
+        self._update_progress()
+
+    def _update_progress(self):
+        """Grab the lock for our "progress_meter" (shared memory float) and
+        update it by 1
+        """
+        with self.progress_meter.get_lock():
+            self.progress_meter.value += 1.0
 
 
 class TVTagger(Tagger):
     """Tagger Subclass tailored to tagging TV Show metadata"""
-    def __init__(self, file_name, logger, customs=None):
-        super(TVTagger, self).__init__(logger)
+    steps = 2 + 10
+
+    def __init__(self, file_name, logger, progress_meter, customs=None):
+        super(TVTagger, self).__init__(logger, progress_meter)
         self.supported_types = ['.mp4', '.m4v']
         self.file_name = file_name
         self.customs = customs or {}
@@ -122,6 +136,8 @@ class TVTagger(Tagger):
         self.subler = Subler(self.file_name, optimize=False,
                              media_kind=self.media_kind)
         self._output_file = u'{episode} {title}.m4v'
+
+        self._update_progress()
 
     @property
     def output_file_name(self):
@@ -136,6 +152,7 @@ class TVTagger(Tagger):
         """This method pulls the provided queries out of their list and then
         uses them as the queries for their respective iTunes searches
         """
+        self._update_progress()
         parameters = {}
         search = queries['season']
         self.logger.info(u'Searching iTunes for {}'.format(search))
@@ -162,6 +179,8 @@ class TVTagger(Tagger):
                     parameters['Artwork'] = art.replace(' ', '\\ ')
             if season_data is None:
                 self.logger.debug(u'{} not found in iTunes'.format(search))
+
+        self._update_progress()
 
         #Gather episode information
         search = queries['episode']
@@ -190,10 +209,15 @@ class TVTagger(Tagger):
             parameters['contentID'] = episode_data.get_episodeID()
             # Content Rating
             self.subler.rating = episode_data.get_content_rating()
+
+        self._update_progress()
+
         return parameters
 
     def do_trakt_search(self):
         """Search Trakt.TV for data on the episode being tagged"""
+        self._update_progress()
+
         show_name = self.atoms['TV Show']
         season_num = int(self.atoms['TV Season'])
         if int(self.atoms.get('TV Episode #', 0)) != 0:
@@ -233,11 +257,15 @@ class TVTagger(Tagger):
         if self.atoms['Genre'] in TV_GENREIDS:
             self.atoms['genreID'] = TV_GENREIDS[self.atoms['Genre']]
 
+        self._update_progress()
+
     def collect_metadata(self):
         """Checks that each file passed in is of a valid type. Providing that
         the file was of the correct type, the various searches are performed and
         all metadata is gathered.
         """
+        self._update_progress()
+
         for key, val in self.customs.items():
             self.atoms[key] = val
 
@@ -266,6 +294,8 @@ class TVTagger(Tagger):
         album_title = u'{}, Season {}'.format(artist, season)
         self.atoms['Album'] = album_title
 
+        self._update_progress()
+
         self.do_trakt_search()
         # Build queries for iTunes search
         tmp = dict()
@@ -291,14 +321,21 @@ class TVTagger(Tagger):
         for key, val in self.do_itunes_search(tmp).items():
             self.atoms[key] = val
 
+        self._update_progress()
+
         self.do_trakt_search()
+
+        self._update_progress()
+
         self.do_tagging()
 
 
 class MusicTagger(Tagger):
     """Tagger Subclass tailored to tagging Music metadata"""
-    def __init__(self, file_name, logger, customs=None):
-        super(MusicTagger, self).__init__(logger)
+    steps = 2 + 6
+
+    def __init__(self, file_name, logger, progress_meter, customs=None):
+        super(MusicTagger, self).__init__(logger, progress_meter)
         self.supported_types = ['.m4a']
         self.file_name = file_name
         self.customs = customs or {}
@@ -308,6 +345,7 @@ class MusicTagger(Tagger):
         self.atoms['Disk #'] = '1/1'
         self.subler = Subler(self.file_name, media_kind=self.media_kind)
         self._output_file = u'{track} {title}.m4a'
+        self._update_progress()
 
     @property
     def output_file_name(self):
@@ -321,6 +359,8 @@ class MusicTagger(Tagger):
         """This method uses the provided query for performing an iTunes audio
         track search
         """
+        self._update_progress()
+
         results = itunes.search_track(query)
         track = None
         for result in results:
@@ -350,15 +390,20 @@ class MusicTagger(Tagger):
             self.atoms['contentID'] = track.get_id()
             if track.json['trackExplicitness'].lower() == 'explicit':
                 self.subler.explicitness = 'Explicit'
+
+            self._update_progress()
+
             self.do_tagging()
         else:
             self.logger.error(u'{} not found in iTunes'.format(query))
+            self._update_progress()
 
     def collect_metadata(self):
         """Checks that each file passed in is of a valid type. Providing that
         the file was of the correct type, the various searches are performed and
         all metadata is gathered.
         """
+        self._update_progress()
         for key, val in self.customs.items():
             self.atoms[key] = val
 
@@ -375,14 +420,18 @@ class MusicTagger(Tagger):
         self.atoms['Track #'] = track
         self.atoms['Name'] = title
         query = u'{} {}'.format(artist, title)
+        self._update_progress()
         self.do_itunes_search(query)
+        self._update_progress()
         self.do_tagging()
 
 
 class MovieTagger(Tagger):
     """Tagger Subclass tailored to tagging Movie metadata"""
-    def __init__(self, file_name, logger, customs=None):
-        super(MovieTagger, self).__init__(logger)
+    steps = 2 + 10
+
+    def __init__(self, file_name, logger, progress_meter, customs=None):
+        super(MovieTagger, self).__init__(logger, progress_meter)
         self.supported_types = ['.mp4', '.m4v']
         self.file_name = file_name
         self.customs = customs or {}
@@ -392,6 +441,7 @@ class MovieTagger(Tagger):
         self.atoms['Disk #'] = '1/1'
         self.subler = Subler(self.file_name, media_kind=self.media_kind)
         self._output_file = u'{title}.m4v'
+        self._update_progress()
 
     @property
     def output_file_name(self):
@@ -403,6 +453,7 @@ class MovieTagger(Tagger):
         parameters dictionary. This title is then used as the query for an
         iTunes movie search
         """
+        self._update_progress()
         self.logger.info('Performing iTunes Search')
         movie_results = itunes.search_movie(self.atoms['Name'])
         table = string.maketrans('', '')
@@ -437,6 +488,7 @@ class MovieTagger(Tagger):
                     if float(matches) / float(total) > 0.8:
                         movie_data = result
                         break
+        self._update_progress()
         with ignored(Exception):
             # Artwork
             url = movie_data.get_artwork()
@@ -465,9 +517,11 @@ class MovieTagger(Tagger):
             self.atoms['genreID'] = MOVIE_GENREIDS[self.atoms['Genre']]
             # Catalog ID
             self.atoms['contentID'] = movie_data.get_id()
+        self._update_progress()
 
     def do_trakt_search(self):
         """Search Trakt.TV for data on the movie being tagged"""
+        self._update_progress()
         title = self.atoms['Name']
         year = None
         if '(' in title and ')' in title:
@@ -485,12 +539,14 @@ class MovieTagger(Tagger):
                 pid = str(os.getpid())
                 art = os.path.abspath('.albumart{}.jpg'.format(pid))
                 self.atoms['Artwork'] = art.replace(' ', '\\ ')
+        self._update_progress()
 
     def collect_metadata(self):
         """Checks that each file passed in is of a valid type. Providing that
         the file was of the correct type, the various searches are performed and
         all metadata is gathered.
         """
+        self._update_progress()
         for key, val in self.customs.items():
             self.atoms[key] = val
 
@@ -504,6 +560,9 @@ class MovieTagger(Tagger):
         # Title
         self.atoms['Name'] = os.path.basename(vid).replace('\\',
                                                            '').strip()[:-4]
+        self._update_progress()
         self.do_itunes_search()
+        self._update_progress()
         self.do_trakt_search()
+        self._update_progress()
         self.do_tagging()
