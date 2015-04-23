@@ -16,8 +16,10 @@ from trakt.tv import TVShow
 from trakt.movies import Movie
 
 from .utils import ignored, move_to_trash, strip_unicode
-from .artwork import generate_artwork
+# from .artwork import generate_artwork
 from .parsers import *
+from .searchers import (TraktTVSearcher, ITunesSeasonSearcher,
+                        ITunesEpisodeSearcher)
 
 __author__ = 'Jon Nappi'
 __all__ = ['Tagger', 'TVTagger', 'MovieTagger', 'MusicTagger']
@@ -44,6 +46,7 @@ MOVIE_GENREIDS = {'Action & Adventure': 4401, 'Anime': 4402, 'Classics': 4403,
 class Tagger(object):
     """Generic Tagger Class"""
     steps = 2
+    searchers = []
 
     def __init__(self, logger, progress_meter):
         super(Tagger, self).__init__()
@@ -90,9 +93,9 @@ class Tagger(object):
         subler = Subler(self.file_name, dest=full_path,
                         media_kind=self.media_kind, metadata=self.atoms.atoms)
 
-        if 'Artwork' not in self.atoms:
-            self.atoms['Artwork'] = generate_artwork(self.atoms['Artist'],
-                                                     self.atoms['Album'])
+        # if 'Artwork' not in self.atoms:
+        #     self.atoms['Artwork'] = generate_artwork(self.atoms['Artist'],
+        #                                              self.atoms['Album'])
 
         self.logger.info('Beginning Metadata tagging...')
         try:
@@ -122,6 +125,7 @@ class Tagger(object):
 class TVTagger(Tagger):
     """Tagger Subclass tailored to tagging TV Show metadata"""
     steps = 2 + 10
+    searchers = [TraktTVSearcher]
 
     def __init__(self, file_name, logger, progress_meter, customs=None):
         super(TVTagger, self).__init__(logger, progress_meter)
@@ -148,117 +152,6 @@ class TVTagger(Tagger):
         return self._output_file.format(episode=episode,
                                         title=self.atoms['Name'])
 
-    def do_itunes_search(self, queries):
-        """This method pulls the provided queries out of their list and then
-        uses them as the queries for their respective iTunes searches
-        """
-        self._update_progress()
-        parameters = {}
-        search = queries['season']
-        self.logger.info(u'Searching iTunes for {}'.format(search))
-        # Gather Season information
-        season_results = itunes.search_season(search)
-        season_data = None
-        with ignored(AttributeError):
-            # Get season data from iTunes
-            if season_results:
-                title_comparator = re.sub(r'\W+', ' ', self.atoms['TV Show'])
-                for res in season_results:
-                    comparative_title = re.sub(r'\W+', ' ', res.artist.name)
-                    if title_comparator.lower() == comparative_title.lower() \
-                            and self.atoms['Album'] in res.get_album().name:
-                        season_data = res
-                        break
-                # Copyright info
-                parameters['Copyright'] = season_data.get_copyright()
-                url = season_data.get_artwork()
-                url = string.replace(url['60'], '60x60-50', '600x600-75')
-                if self.has_artwork(url):
-                    pid = str(os.getpid())
-                    art = os.path.abspath('.albumart{}.jpg'.format(pid))
-                    parameters['Artwork'] = art.replace(' ', '\\ ')
-            if season_data is None:
-                self.logger.debug(u'{} not found in iTunes'.format(search))
-
-        self._update_progress()
-
-        #Gather episode information
-        search = queries['episode']
-        self.logger.info(u'Searching iTunes for {}'.format(search))
-        episode_results = itunes.search_episode(search)
-        episode_data = None
-        if episode_results:
-            episode_data = episode_results[0]
-        else:
-            self.logger.debug(u'{} not found in iTunes'.format(search))
-        with ignored(AttributeError):
-            # Genre
-            parameters['Genre'] = episode_data.get_genre()
-            # Genre ID
-            parameters['genreID'] = TV_GENREIDS[parameters['Genre']]
-            # Release Date
-            parameters['Release Date'] = episode_data.get_release_date()
-            # short description, max length 255 characters
-            description = episode_data.get_short_description().strip()[:255]
-            description = string.replace(description, '\n', '')
-            parameters['Description'] = strip_unicode(description)
-            # long description
-            ldesc = 'Long Description'
-            parameters[ldesc] = episode_data.get_long_description().strip()
-            # iTunes Catalog ID
-            parameters['contentID'] = episode_data.get_episodeID()
-            # Content Rating
-            self.subler.rating = episode_data.get_content_rating()
-
-        self._update_progress()
-
-        return parameters
-
-    def do_trakt_search(self):
-        """Search Trakt.TV for data on the episode being tagged"""
-        self._update_progress()
-
-        show_name = self.atoms['TV Show']
-        season_num = int(self.atoms['TV Season'])
-        if int(self.atoms.get('TV Episode #', 0)) != 0:
-            episode_num = int(self.atoms['TV Episode #']) - 1
-        else:
-            episode_num = int(self.atoms['TV Episode #'])
-        msg = u'{} : {} : {}'.format(show_name, season_num, episode_num)
-        self.logger.warning(msg)
-        show = TVShow(show_name)
-        episode = show.seasons[season_num].episodes[episode_num]
-
-        self.atoms['Rating'] = show.certification
-        self.atoms['Genre'] = show.genres[0].name
-        self.atoms['TV Network'] = show.network
-        actors = []
-        for actor in show.people:
-            if hasattr(actor, 'name'):
-                actors.append(actor.name)
-        self.atoms['Cast'] = ', '.join([actor for actor in actors if
-                                        actor is not None])
-        self.atoms['Release Date'] = episode.first_aired_iso
-        if len(episode.overview) > 250:
-            self.atoms['Description'] = episode.overview[:250]
-        else:
-            self.atoms['Description'] = episode.overview
-        self.atoms['Long Description'] = episode.overview
-
-        self.atoms['TV Show'] = episode.show
-        self.atoms['Artist'] = episode.show
-
-        self.atoms['Name'] = episode.title
-        # Reformat fields
-        self.atoms['Album Artist'] = episode.show
-         # Reformat album name
-        self.atoms['Album'] = '{}, Season {}'.format(self.atoms['Artist'],
-                                                     self.atoms['TV Season'])
-        if self.atoms['Genre'] in TV_GENREIDS:
-            self.atoms['genreID'] = TV_GENREIDS[self.atoms['Genre']]
-
-        self._update_progress()
-
     def collect_metadata(self):
         """Checks that each file passed in is of a valid type. Providing that
         the file was of the correct type, the various searches are performed and
@@ -276,19 +169,11 @@ class TVTagger(Tagger):
         my_parser = TVParser(self.file_name)
         show, season, episode, title = my_parser.parse()
 
-        # name of episode
-        self.atoms['Name'] = title
-        # season number
-        self.atoms['TV Season'] = season
-        # name of show
+        self.atoms['Name'], self.atoms['TV Season'] = title, season
         for tag in ['Artist', 'Album Artist', 'TV Show']:
             self.atoms[tag] = os.path.basename(show)
-        # Episode number
         self.atoms['TV Episode #'] = self.atoms['Track #'] = episode
-
-        # Format episode ID
-        ep_id = 'S{}E{}'.format(season, episode)
-        self.atoms['TV Episode ID'] = ep_id
+        self.atoms['TV Episode ID'] = 'S{}E{}'.format(season, episode)
         # Format album name
         artist = self.atoms.get('Artist', '')
         album_title = u'{}, Season {}'.format(artist, season)
@@ -296,36 +181,22 @@ class TVTagger(Tagger):
 
         self._update_progress()
 
-        self.do_trakt_search()
-        # Build queries for iTunes search
-        tmp = dict()
-        tmp['season'] = u'{} {}'.format(artist, season)
-        query_title = unicode(self.atoms['Name']).lower()
-        query_title = string.replace(query_title, '-', ' ').strip()
-        if 'part ' in query_title:
-            query_title = string.replace(query_title, 'part ', 'pt ')
-        if 'pt i' in query_title:
-            query_title = string.replace(query_title, 'pt i', 'pt 1')
-        if 'pt ii' in query_title:
-            query_title = string.replace(query_title, 'pt ii', 'pt 2')
-        if 'pt iii' in query_title:
-            query_title = string.replace(query_title, 'pt iii', 'pt 3')
-        if 'fuckers' in query_title:
-            query_title = string.replace(query_title, 'fuckers', 'fu*kers')
-        if 'fucker' in query_title:
-            query_title = string.replace(query_title, 'fucker', 'f*****')
-        if 'fuck' in query_title:
-            query_title = string.replace(query_title, 'fuck', 'f***')
-        tmp['episode'] = u'{} {}'.format(os.path.basename(show), query_title)
-        # Concatenate parameters with iTunes query results
-        for key, val in self.do_itunes_search(tmp).items():
-            self.atoms[key] = val
+        TraktTVSearcher(self.atoms).search(query=self.atoms['TV Show'])
+        season_query = u'{} {}'.format(artist, season)
+        query_title = unicode(self.atoms['Name']).lower().replace('-', ' ').strip()
+        episode_query = u'{} {}'.format(os.path.basename(show), query_title)
+        ITunesSeasonSearcher(self.atoms).search(query=season_query)
+        ITunesEpisodeSearcher(self.atoms).search(query=episode_query)
+        TraktTVSearcher(self.atoms).search(query=self.atoms['TV Show'])
 
-        self._update_progress()
-
-        self.do_trakt_search()
-
-        self._update_progress()
+        if 'Artwork_URL' in self.atoms:
+            url = self.atoms.pop('Artwork_URL')
+            if self.has_artwork(url):
+                pid = str(os.getpid())
+                art = os.path.abspath('.albumart{}.jpg'.format(pid))
+                self.atoms['Artwork'] = art.replace(' ', '\\ ')
+        if 'Content Rating' in self.atoms:
+            self.subler.rating = self.atoms.pop('Content Rating')
 
         self.do_tagging()
 
