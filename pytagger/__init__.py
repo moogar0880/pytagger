@@ -1,9 +1,9 @@
-import sys
+# -*- coding: utf-8 -*-
 try:
-    from .utils import *
-    from .taggers import *
+    from pytagger.taggers import TVTagger, MovieTagger, MusicTagger  # NOQA
 except ImportError as ex:
     # Don't let dependencies stop us from importing on install
+    import sys
     if 'install' not in sys.argv:
         raise ex
     pass

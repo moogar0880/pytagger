@@ -1,22 +1,11 @@
-import os
-import subprocess
 from setuptools import setup
 
 from pytagger import __version__
 
 
 packages = ['pytagger']
-requires = ['fuzzywuzzy', 'requests', 'trakt', 'subler', 'pillow']
-
-itunes = 'git+https://github.com/moogar0880/python-itunes#egg=python-itunes-1.1'
-
-try:
-    import itunes
-except ImportError:
-    install_cmd = 'pip install %s'
-    if os.getuid() == 0:
-        install_cmd = 'sudo pip install %s'
-    subprocess.check_call(install_cmd % itunes, shell=True)
+with open('requirements.txt') as f:
+    requires = [line.strip() for line in f if line.strip()]
 
 setup(name='pytagger',
       version=__version__,
