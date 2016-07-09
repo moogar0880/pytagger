@@ -78,20 +78,23 @@ class Tagger(object):
                         media_kind=self.media_kind, metadata=self.atoms.atoms)
 
         LOGGER.info('Beginning Metadata tagging...')
-        import pdb; pdb.set_trace()
         try:
             subler.tag()
         except subprocess.CalledProcessError as ex:
             if ex.returncode != 255:
                 raise ex
-        LOGGER.info('Metadata tagging complete. moving updated file')
+        LOGGER.info('Metadata tagging copmlete. moving updated file')
 
         for tag, value in self.atoms.items():
             if tag == 'Artwork' and os.path.exists(value):
+                LOGGER.info('Deleting Temporary Artwork: {}'.format(value))
                 os.remove(value)
+        LOGGER.info('Moving {} to trash'.format(self.file_name))
         trash(self.file_name)
         file_name = os.path.basename(self.file_name)
         dest_path = self.file_name.replace(file_name, self.output_file_name)
+
+        LOGGER.info('Moving {} to {}'.format(full_path, dest_path))
         shutil.move(full_path, dest_path)
 
 
@@ -100,7 +103,7 @@ class TVTagger(Tagger):
     PARSER = TVParser
     searchers = (ITunesSeasonSearcher, ITunesEpisodeSearcher, TraktTVSearcher)
     media_kind = 'TV Show'
-    supported_types = ('.mp4', '.m4v')
+    supported_types = ('.mp4', '.m4v', '.mkv')
     output_file_fmt = '{episode} {title}.m4v'
 
     @property

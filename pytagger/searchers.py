@@ -2,11 +2,13 @@
 import os
 import re
 import itunes
-import logging
 import requests
 
+from asyncio.log import logger as LOGGER
 from trakt.movies import Movie
 from trakt.tv import TVShow, TVEpisode
+from trakt.utils import slugify
+from uuid import uuid4
 
 __author__ = 'Jon Nappi'
 __all__ = ['TraktTVSearcher', 'ITunesSeasonSearcher', 'ITunesEpisodeSearcher']
@@ -33,6 +35,8 @@ MOVIE_GENREIDS = {'Action & Adventure': 4401, 'Anime': 4402, 'Classics': 4403,
 # inject trakt genre variables into their itunes equivalents
 MOVIE_GENREIDS['Fantasy'] = 4413
 
+#: ITUNES_DATE_FMT is the format string for an iTunes timestamp
+ITUNES_DATE_FMT = '%Y-%m-%dT%H:%M:%SZ'
 
 class Callback(object):
     """A class used to encapsulate a set of keys and a callable. The process
@@ -57,8 +61,6 @@ class Searcher(object):
 
     def __init__(self, context):
         self.context = context
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.logger.setLevel(logging.DEBUG)
 
     def _search(self, query):
         raise NotImplementedError()
@@ -84,15 +86,19 @@ class Searcher(object):
         response is recieved. If an error should occur, nothing is downloaded
         and False is returned
         """
-        self.logger.info('Downloading Album Artwork...\n\tURL: {}'.format(url))
+        if not url:
+            return False
+        LOGGER.info('Downloading Album Artwork...')
+        LOGGER.debug('URL: %s', url)
         req = requests.get(url)
         if 200 <= req.status_code < 300:
-            file_name = '.albumart{}.jpg'.format(str(os.getpid()))
+            file_name = '.albumart{}.jpg'.format(str(uuid4()))
+            LOGGER.info('Writing artwork to %s', file_name)
             with open(file_name, 'wb') as f:
                 f.write(req.content)
-            return True
+            return file_name.replace(' ', '\\ ')
         message = 'Album Art Not Downloaded: {}'.format(req.status_code)
-        self.logger.log(message)
+        LOGGER.warn(message)
         return False
 
     def search(self, parser, context=None):
@@ -109,10 +115,9 @@ class Searcher(object):
         # fetch said artwork and set the Artwork Atom to point to it
         if 'Artwork_URL' in res:
             url = res.pop('Artwork_URL')
-            if url.value and self.has_artwork(url.value):
-                pid = str(os.getpid())
-                art = os.path.abspath('.albumart{}.jpg'.format(pid))
-                res['Artwork'] = art.replace(' ', '\\ ')
+            artwork = self.has_artwork(url.value)
+            if url.value and artwork:
+                res['Artwork'] = artwork
         return res
 
     def filter_results(self, query, results):
@@ -142,9 +147,10 @@ class TraktTVSearcher(Searcher):
     def _get_episode(self, episode):
         """Extract data from a specific episode"""
         mapping = {
-            'Release Date': 'first_aired',
             'Long Description': 'overview',
             'Name': 'title',
+            'Release Date': Callback(['first_aired_date'],
+                                     lambda fa: fa.strftime(ITUNES_DATE_FMT)),
             'Description': Callback(['overview'],
                                     lambda overview: overview[:250]),
         }
@@ -161,13 +167,16 @@ class TraktTVSearcher(Searcher):
         self.context['TV Episode #'] = self.context['Track #'] = episode
         self.context['TV Episode ID'] = 'S{}E{}'.format(season, episode)
         self.context['Album'] = '{}, Season {}'.format(show, season)
+        LOGGER.debug('Trakt Query: %s', show)
         return show
 
     def _search(self, query):
         """Search Trakt for a TV episode matching *query*"""
         results = TVShow.search(query)
+        self.filter_key = slugify(query)
         slug = self.filter_results(query, results).slug
         show = TVShow(slug)
+        LOGGER.info('Trakt Search Result: %s', str(show))
         self._apply_mapping(show)  # Get general information about the show
 
         # Get episode specific data
@@ -300,6 +309,7 @@ class ITunesEpisodeSearcher(Searcher):
         """Search iTunes for a TV Episode matching *query*"""
         results = itunes.search_episode(query)
         episode = self.filter_results(query, results)
+        LOGGER.info('iTunes Search Result: %s', str(episode))
         if episode is not None:
             return self._apply_mapping(episode)
         return self.context
@@ -341,6 +351,7 @@ class ITunesMovieSearcher(Searcher):
             self.context.update(context)
         results = itunes.search_movie(query)
         movie = self._filter_results(results)
+        LOGGER.info('iTunes Search Result: %s', str(movie))
         return self._apply_mapping(movie)
 
 
@@ -365,8 +376,9 @@ class ITunesMusicSearch(Searcher):
             self.context.update(context)
         results = itunes.search_track(query)
         track = self._filter_results(results)
+        LOGGER.info('iTunes Search Result: %s', str(track))
         if track is None:
-            self.logger.error('{} not found in iTunes'.format(query))
+            LOGGER.error('{} not found in iTunes'.format(query))
             return
         self.context.update(dict(Album=track.album,
                                  Genre=track.genre,
@@ -374,10 +386,9 @@ class ITunesMusicSearch(Searcher):
                                  Copyright=track.album.copyright))
         # Albumart
         url = track.artwork.get('600', '')
-        if self.has_artwork(url):
-            pid = str(os.getpid())
-            art = os.path.abspath('.albumart{}.jpg'.format(pid))
-            self.context['Artwork'] = art.replace(' ', '\\ ')
+        artwork = self.has_artwork(url.value)
+        if artwork:
+            self.context['Artwork'] = artwork
         self.context['Track #'] = '{}/{}'.format(self.context['Track #'],
                                                  track.album.track_count)
         self.context['Release Date'] = track.album.release_date_raw

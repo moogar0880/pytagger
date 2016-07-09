@@ -1,6 +1,5 @@
 pyitunes==1.0.1
 osx_trash==1.0.0
-pillow==2.9.0
 requests>=2.9
 subler==0.4.2
 trakt>=2.7

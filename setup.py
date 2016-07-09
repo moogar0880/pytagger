@@ -1,14 +1,12 @@
 from setuptools import setup
 
-from pytagger import __version__
-
 
 packages = ['pytagger']
 with open('requirements.txt') as f:
     requires = [line.strip() for line in f if line.strip()]
 
 setup(name='pytagger',
-      version=__version__,
+      version='1.1.2',
       description='A python backend to iTunes style metadata tagging',
       author='Jonathan Nappi',
       author_email='moogar@comcast.net',

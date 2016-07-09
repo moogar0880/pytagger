@@ -1,12 +1,5 @@
 # -*- coding: utf-8 -*-
-try:
-    from pytagger.taggers import TVTagger, MovieTagger, MusicTagger  # NOQA
-except ImportError as ex:
-    # Don't let dependencies stop us from importing on install
-    import sys
-    if 'install' not in sys.argv:
-        raise ex
-    pass
+from pytagger.taggers import TVTagger, MovieTagger, MusicTagger  # NOQA
 
 version_info = (1, 1, 2)
 
