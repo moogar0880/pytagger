@@ -137,7 +137,7 @@ class MovieTagger(Tagger):
     """Tagger Subclass tailored to tagging Movie metadata"""
     PARSER = MovieParser
     searchers = (ITunesMovieSearcher, TraktMovieSearcher)
-    supported_types = ('.mp4', '.m4v')
+    supported_types = ('.mp4', '.m4v', '.mkv')
     output_file_fmt = '{title}.m4v'
 
     @property

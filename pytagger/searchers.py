@@ -216,7 +216,6 @@ class TraktMovieSearcher(Searcher):
 
     def _filter_results(self, query, results):
         """Filter our search results to find a movie matching *query*"""
-        import pdb; pdb.set_trace()
         for result in results:
             if self._title.lower() == result.title.lower():
                 if self._year is not None and self._year == result.year:
