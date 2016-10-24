@@ -104,7 +104,7 @@ class TVTagger(Tagger):
     searchers = (ITunesSeasonSearcher, ITunesEpisodeSearcher, TraktTVSearcher)
     media_kind = 'TV Show'
     supported_types = ('.mp4', '.m4v', '.mkv')
-    output_file_fmt = '{episode} {title}.m4v'
+    output_file_fmt = '{show}_s{season}e{episode}.m4v'
 
     @property
     def output_file_name(self):
@@ -112,8 +112,11 @@ class TVTagger(Tagger):
         episode = self.atoms['TV Episode #']
         if episode < 10:
             episode = '0{}'.format(episode)
-        return self.output_file_fmt.format(episode=episode,
-                                           title=self.atoms['Name'])
+        show = self.atoms['TV Show']
+        escaped_show = show.lower().replace(' ', '-')
+        return self.output_file_fmt.format(show=escaped_show,
+                                           season=self.atoms['TV Season'],
+                                           episode=episode)
 
 
 class MusicTagger(Tagger):

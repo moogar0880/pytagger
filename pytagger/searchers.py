@@ -126,7 +126,9 @@ class Searcher(object):
             key = str(getattr(result, self.filter_key, None)).lower()
             if key == query.lower():
                 return result
-        return results[0]
+        if results:
+            return results[0]
+        return None
 
 
 class TraktTVSearcher(Searcher):
@@ -174,8 +176,10 @@ class TraktTVSearcher(Searcher):
         """Search Trakt for a TV episode matching *query*"""
         results = TVShow.search(query)
         self.filter_key = slugify(query)
-        slug = self.filter_results(query, results).slug
-        show = TVShow(slug)
+        result = self.filter_results(query, results)
+        if result is None:
+            return self.context
+        show = TVShow(result.slug)
         LOGGER.info('Trakt Search Result: %s', str(show))
         self._apply_mapping(show)  # Get general information about the show
 
@@ -184,7 +188,7 @@ class TraktTVSearcher(Searcher):
         if season_num is None:
             return self.context
         episode_num = self.context.get('TV Episode #')
-        episode = TVEpisode(slug, season_num, episode_num)
+        episode = TVEpisode(result.slug, season_num, episode_num)
         return self._get_episode(episode)
 
 
